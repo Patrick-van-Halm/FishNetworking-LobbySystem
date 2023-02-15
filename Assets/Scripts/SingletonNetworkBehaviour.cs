@@ -9,7 +9,7 @@ public class SingletonNetworkBehaviour<T> : NetworkBehaviour where T : NetworkBe
 
     protected virtual void Awake()
     {
-        if (Instance && Instance == this as T)
+        if (Instance && Instance != this as T)
         {
             Destroy(this);
             return;
