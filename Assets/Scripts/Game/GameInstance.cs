@@ -1,3 +1,4 @@
+using FishNet.CodeGenerating;
 using FishNet.Object;
 using FishNet.Object.Synchronizing;
 using UnityEngine.Events;
@@ -12,9 +13,9 @@ public class GameInstance : BaseLobbyInstance
     }
 
     public UnityEvent GameStateReady = new();
-    
-    [SyncVar] private GameInstanceState _state;
 
+    // syncvar migration, was [SyncVar] private GameInstanceState _state;
+    [AllowMutableSyncType] private SyncVar<GameInstanceState> _state = new SyncVar<GameInstanceState>();
     /// <summary>
     /// SERVER ONLY:
     /// Marks the Game instance in use, the lobby will also be attached so the Game instance has the Lobby details.
@@ -25,7 +26,7 @@ public class GameInstance : BaseLobbyInstance
     {
         // Sets the lobby when game scene is used for a specific lobby
         base.Use(lobby);
-        _state = GameInstanceState.Used;
+        _state.Value = GameInstanceState.Used;
     }
 
     /// <summary>
@@ -35,7 +36,7 @@ public class GameInstance : BaseLobbyInstance
     [Server]
     public void Ready()
     {
-        _state = GameInstanceState.Ready;
+        _state.Value = GameInstanceState.Ready;
         GameStateReady?.Invoke();
     }
 }

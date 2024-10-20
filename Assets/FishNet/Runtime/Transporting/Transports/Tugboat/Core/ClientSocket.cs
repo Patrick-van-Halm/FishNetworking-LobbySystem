@@ -1,7 +1,9 @@
+using FishNet.Managing;
 using FishNet.Managing.Logging;
 using LiteNetLib;
 using LiteNetLib.Layers;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -35,20 +37,16 @@ namespace FishNet.Transporting.Tugboat.Client
         /// <summary>
         /// Changes to the sockets local connection state.
         /// </summary>
-        private Queue<LocalConnectionState> _localConnectionStates = new Queue<LocalConnectionState>();
+        private ConcurrentQueue<LocalConnectionState> _localConnectionStates = new();
         /// <summary>
         /// Inbound messages which need to be handled.
         /// </summary>
-        private Queue<Packet> _incoming = new Queue<Packet>();
+        private ConcurrentQueue<Packet> _incoming = new();
         /// <summary>
         /// Outbound messages which need to be handled.
         /// </summary>
-        private Queue<Packet> _outgoing = new Queue<Packet>();
+        private Queue<Packet> _outgoing = new();
         #endregion
-        /// <summary>
-        /// Client socket manager.
-        /// </summary>
-        private NetManager _client;
         /// <summary>
         /// How long in seconds until client times from server.
         /// </summary>
@@ -60,18 +58,23 @@ namespace FishNet.Transporting.Tugboat.Client
         /// <summary>
         /// Locks the NetManager to stop it.
         /// </summary>
-        private readonly object _stopLock = new object();
+        private readonly object _stopLock = new();
+        /// <summary>
+        /// While true, forces sockets to send data directly to interface without routing.
+        /// </summary>
+        private bool _dontRoute;
         #endregion
 
         /// <summary>
         /// Initializes this for use.
         /// </summary>
         /// <param name="t"></param>
-        internal void Initialize(Transport t, int unreliableMTU, PacketLayerBase packetLayer)
+        internal void Initialize(Transport t, int unreliableMTU, PacketLayerBase packetLayer, bool dontRoute)
         {
             base.Transport = t;
             _mtu = unreliableMTU;
             _packetLayer = packetLayer;
+            _dontRoute = dontRoute;
         }
 
         /// <summary>
@@ -80,7 +83,16 @@ namespace FishNet.Transporting.Tugboat.Client
         internal void UpdateTimeout(int timeout)
         {
             _timeout = timeout;
-            base.UpdateTimeout(_client, timeout);
+            base.UpdateTimeout(base.NetManager, timeout);
+        }
+
+        /// <summary>
+        /// Polls the socket for new data.
+        /// </summary>
+        
+        internal void PollSocket()
+        {
+            base.PollSocket(base.NetManager);
         }
 
         /// <summary>
@@ -88,19 +100,20 @@ namespace FishNet.Transporting.Tugboat.Client
         /// </summary>
         private void ThreadedSocket()
         {
-            EventBasedNetListener listener = new EventBasedNetListener();
+            EventBasedNetListener listener = new();
             listener.NetworkReceiveEvent += Listener_NetworkReceiveEvent;
             listener.PeerConnectedEvent += Listener_PeerConnectedEvent;
             listener.PeerDisconnectedEvent += Listener_PeerDisconnectedEvent;
 
-            _client = new NetManager(listener, _packetLayer);
-            _client.MtuOverride = (_mtu + NetConstants.FragmentedHeaderTotalSize);
+            base.NetManager = new(listener, _packetLayer, false);
+            base.NetManager.DontRoute = _dontRoute;
+            base.NetManager.MtuOverride = (_mtu + NetConstants.FragmentedHeaderTotalSize);
 
             UpdateTimeout(_timeout);
 
             _localConnectionStates.Enqueue(LocalConnectionState.Starting);
-            _client.Start();
-            _client.Connect(_address, _port, string.Empty);
+            base.NetManager.Start();
+            base.NetManager.Connect(_address, _port, string.Empty);
         }
 
 
@@ -109,15 +122,15 @@ namespace FishNet.Transporting.Tugboat.Client
         /// </summary>
         private void StopSocketOnThread()
         {
-            if (_client == null)
+            if (base.NetManager == null)
                 return;
 
             Task t = Task.Run(() =>
             {
                 lock (_stopLock)
                 {
-                    _client?.Stop();
-                    _client = null;
+                    base.NetManager?.Stop();
+                    base.NetManager = null;
                 }
 
                 //If not stopped yet also enqueue stop.
@@ -131,8 +144,6 @@ namespace FishNet.Transporting.Tugboat.Client
         /// </summary>
         /// <param name="address"></param>
         /// <param name="port"></param>
-        /// <param name="channelsCount"></param>
-        /// <param name="pollTime"></param>
         internal bool StartConnection(string address, ushort port)
         {
             if (base.GetConnectionState() != LocalConnectionState.Stopped)
@@ -170,10 +181,10 @@ namespace FishNet.Transporting.Tugboat.Client
         /// <summary>
         /// Resets queues.
         /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        
         private void ResetQueues()
         {
-            _localConnectionStates.Clear();
+            base.ClearGenericQueue(ref _localConnectionStates);
             base.ClearPacketQueue(ref _incoming);
             base.ClearPacketQueue(ref _outgoing);
         }
@@ -209,8 +220,8 @@ namespace FishNet.Transporting.Tugboat.Client
         private void DequeueOutgoing()
         {
             NetPeer peer = null;
-            if (_client != null)
-                peer = _client.FirstPeer;
+            if (base.NetManager != null)
+                peer = base.NetManager.FirstPeer;
             //Server connection hasn't been made.
             if (peer == null)
             {
@@ -256,13 +267,11 @@ namespace FishNet.Transporting.Tugboat.Client
         /// </summary>
         internal void IterateIncoming()
         {
-            _client?.PollEvents();
-
             /* Run local connection states first so we can begin
             * to read for data at the start of the frame, as that's
             * where incoming is read. */
-            while (_localConnectionStates.Count > 0)
-                base.SetConnectionState(_localConnectionStates.Dequeue(), false);
+            while (_localConnectionStates.TryDequeue(out LocalConnectionState result))
+                base.SetConnectionState(result, false);
 
             //Not yet started, cannot continue.
             LocalConnectionState localState = base.GetConnectionState();
@@ -278,10 +287,9 @@ namespace FishNet.Transporting.Tugboat.Client
             }
 
             /* Incoming. */
-            while (_incoming.Count > 0)
+            while (_incoming.TryDequeue(out Packet incoming))
             {
-                Packet incoming = _incoming.Dequeue();
-                ClientReceivedDataArgs dataArgs = new ClientReceivedDataArgs(
+                ClientReceivedDataArgs dataArgs = new(
                     incoming.GetArraySegment(),
                     (Channel)incoming.Channel, base.Transport.Index);
                 base.Transport.HandleClientReceivedDataArgs(dataArgs);

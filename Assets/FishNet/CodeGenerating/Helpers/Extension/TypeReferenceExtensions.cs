@@ -24,7 +24,7 @@ namespace FishNet.CodeGenerating.Helping.Extension
         internal static bool IsClassOrStruct(this TypeReference typeRef, CodegenSession session)
         {
             TypeDefinition typeDef = typeRef.CachedResolve(session);
-            return (!typeDef.IsPrimitive && (typeDef.IsClass || typeDef.IsValueType));
+            return (!typeDef.IsPrimitive && !typeDef.IsEnum && (typeDef.IsClass || typeDef.IsValueType));
         }
 
         /// <summary>
@@ -43,7 +43,7 @@ namespace FishNet.CodeGenerating.Helping.Extension
         /// </summary>
         /// <param name="typeRef"></param>
         /// <returns></returns>
-        public static IEnumerable<FieldDefinition> FindAllSerializableFields(this TypeReference typeRef, CodegenSession session, 
+        public static IEnumerable<FieldDefinition> FindAllSerializableFields(this TypeReference typeRef, CodegenSession session,
             System.Type[] excludedBaseTypes = null, string[] excludedAssemblyPrefixes = null)
         {
             return typeRef.Resolve().FindAllPublicFields(session, excludedBaseTypes, excludedAssemblyPrefixes);
@@ -73,7 +73,10 @@ namespace FishNet.CodeGenerating.Helping.Extension
         /// <returns></returns>
         public static bool IsMultidimensionalArray(this TypeReference typeRef)
         {
-            return typeRef is ArrayType arrayType && arrayType.Rank > 1;
+            if (typeRef is ArrayType && typeRef.Name.Contains("[][]"))
+                return true;
+
+            return false;
         }
 
 

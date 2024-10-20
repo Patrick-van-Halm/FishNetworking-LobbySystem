@@ -1,25 +1,32 @@
-﻿using UnityEngine;
+﻿using System.Runtime.CompilerServices;
+using FishNet.Connection;
+using FishNet.Object.Synchronizing;
+using FishNet.Serializing;
+using FishNet.Serializing.Helping;
+using FishNet.Transporting;
+using GameKit.Dependencies.Utilities;
+using UnityEngine;
 
 namespace FishNet.Object
 {
-    public sealed partial class NetworkObject : MonoBehaviour
+    public partial class NetworkObject : MonoBehaviour
     {
         /// <summary>
-        /// Writers dirty SyncTypes for all Networkbehaviours if their write tick has been met.
+        /// Writes SyncTypes for previous and new owner where permissions apply.
         /// </summary>
-        internal void WriteDirtySyncTypes()
+        
+        private void WriteSyncTypesForManualOwnershipChange(NetworkConnection prevOwner)
         {
-            NetworkBehaviour[] nbs = NetworkBehaviours;
-            int count = nbs.Length;
-            for (int i = 0; i < count; i++)
+            if (prevOwner.IsActive)
+                WriteForConnection(prevOwner, ReadPermission.ExcludeOwner);
+            if (Owner.IsActive)
+                WriteForConnection(Owner, ReadPermission.OwnerOnly);
+            
+            void WriteForConnection(NetworkConnection conn, ReadPermission permission)
             {
-                //There was a null check here before, shouldn't be needed so it was removed.
-                NetworkBehaviour nb = nbs[i];
-                nb.WriteDirtySyncTypes(true, true);
-                nb.WriteDirtySyncTypes(false, true);
+                for (int i = 0; i < NetworkBehaviours.Count; i++)
+                    NetworkBehaviours[i].WriteSyncTypesForConnection(conn, permission);
             }
         }
     }
-
 }
-

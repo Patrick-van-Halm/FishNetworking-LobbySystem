@@ -7,23 +7,10 @@ namespace FishNet.Object.Prediction
     /// Only data used as method arguments will be serialized.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
-    public class ReplicateAttribute : Attribute 
-    {
-        /// <summary>
-        /// How many past datas to resend.
-        /// </summary>
-        public byte Resends = 5;
-    }
+    public class ReplicateAttribute : Attribute { }
     /// <summary>
     /// Reconcile methods indicate how to reset your script or object after the server has replicated user data.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
-    public class ReconcileAttribute : Attribute 
-    {
-        /// <summary>
-        /// How many times to resend reconcile.
-        /// </summary>
-        public byte Resends = 3;
-    }
-
+    public class ReconcileAttribute : Attribute { }
 }

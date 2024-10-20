@@ -28,7 +28,7 @@ namespace FishNet.CodeGenerating
         /// <summary>
         /// SyncVars that are being accessed from an assembly other than the currently being processed one.
         /// </summary>
-        internal List<FieldDefinition> DifferentAssemblySyncVars = new List<FieldDefinition>();
+        internal List<FieldDefinition> DifferentAssemblySyncVars = new();
 
 
         /// <summary>
@@ -38,7 +38,7 @@ namespace FishNet.CodeGenerating
         /// <summary>
         /// Quick lookup of base classes.
         /// </summary>
-        private Dictionary<string, CodegenBase> _basesCache = new Dictionary<string, CodegenBase>();
+        private Dictionary<string, CodegenBase> _basesCache = new();
 
         /// <summary>
         /// Returns class of type if found within CodegenBase classes.
@@ -58,21 +58,21 @@ namespace FishNet.CodeGenerating
         internal bool Initialize(ModuleDefinition module)
         {
             Module = module;
-            Diagnostics = new List<DiagnosticMessage>();
+            Diagnostics = new();
 
-            _bases = new List<CodegenBase>()
+            _bases = new()
                 {
                     new ReaderImports(), new ReaderProcessor()
                     ,new WriterImports(), new WriterProcessor()
                     , new PhysicsHelper(), new TimeManagerHelper(), new AttributeHelper(), new GeneralHelper()
                     , new ObjectHelper(), new NetworkBehaviourHelper()
-                    , new CreatedSyncVarGenerator(), new TransportHelper()
+                    , new TransportHelper()
                     , new NetworkConnectionImports(), new PredictedObjectHelper(), new GeneratorHelper()
                     , new CustomSerializerProcessor()
                     , new NetworkBehaviourProcessor()
                     , new QolAttributeProcessor()
                     , new RpcProcessor()
-                    , new NetworkBehaviourSyncProcessor()
+                    , new SyncTypeProcessor()
                     , new PredictionProcessor()
                 };
 
@@ -95,8 +95,6 @@ namespace FishNet.CodeGenerating
         }
 
 
-
-
         #region Logging.
         /// <summary>
         /// Logs a warning.
@@ -104,11 +102,7 @@ namespace FishNet.CodeGenerating
         /// <param name="msg"></param>
         internal void LogWarning(string msg)
         {
-#if UNITY_2020_1_OR_NEWER
             Diagnostics.AddWarning(msg);
-#else
-            Debug.LogWarning(msg);
-#endif
         }
         /// <summary>
         /// Logs an error.
@@ -116,11 +110,7 @@ namespace FishNet.CodeGenerating
         /// <param name="msg"></param>
         internal void LogError(string msg)
         {
-#if UNITY_2020_1_OR_NEWER
             Diagnostics.AddError(msg);
-#else
-            Debug.LogError(msg);
-#endif
         }
         #endregion
 

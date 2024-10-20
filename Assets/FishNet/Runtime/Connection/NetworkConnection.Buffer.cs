@@ -2,6 +2,7 @@
 using FishNet.Managing;
 using FishNet.Managing.Logging;
 using FishNet.Managing.Transporting;
+using FishNet.Object;
 using FishNet.Transporting;
 using System;
 using System.Collections.Generic;
@@ -11,16 +12,17 @@ namespace FishNet.Connection
 {
     public partial class NetworkConnection
     {
-
         #region Private.
+
         /// <summary>
         /// PacketBundles to send to this connection. An entry will be made for each channel.
         /// </summary>
-        private List<PacketBundle> _toClientBundles = new List<PacketBundle>();
+        private List<PacketBundle> _toClientBundles = new();
         /// <summary>
         /// True if this object has been dirtied.
         /// </summary>
         private bool _serverDirtied;
+
         #endregion
 
         /// <summary>
@@ -31,7 +33,7 @@ namespace FishNet.Connection
             for (byte i = 0; i < TransportManager.CHANNEL_COUNT; i++)
             {
                 int mtu = NetworkManager.TransportManager.GetLowestMTU(i);
-                _toClientBundles.Add(new PacketBundle(NetworkManager, mtu));
+                _toClientBundles.Add(new(NetworkManager, mtu));
             }
         }
 
@@ -48,14 +50,14 @@ namespace FishNet.Connection
             if (!IsActive)
                 NetworkManager.LogError($"Connection is not valid, cannot send broadcast.");
             else
-                NetworkManager.ServerManager.Broadcast<T>(this, message, requireAuthenticated, channel);
+                NetworkManager.ServerManager.Broadcast(this, message, requireAuthenticated, channel);
         }
 
         /// <summary>
         /// Sends data from the server to a client.
         /// </summary>
         /// <param name="forceNewBuffer">True to force data into a new buffer.</param>
-        internal void SendToClient(byte channel, ArraySegment<byte> segment, bool forceNewBuffer = false)
+        internal void SendToClient(byte channel, ArraySegment<byte> segment, bool forceNewBuffer = false, DataOrderType orderType = DataOrderType.Default)
         {
             //Cannot send data when disconnecting.
             if (Disconnecting)
@@ -66,11 +68,12 @@ namespace FishNet.Connection
                 NetworkManager.LogWarning($"Data cannot be sent to connection {ClientId} because it is not active.");
                 return;
             }
+
             //If channel is out of bounds then default to the first channel.
             if (channel >= _toClientBundles.Count)
                 channel = 0;
 
-            _toClientBundles[channel].Write(segment, forceNewBuffer);
+            _toClientBundles[channel].Write(segment, forceNewBuffer, orderType);
             ServerDirty();
         }
 
@@ -105,6 +108,4 @@ namespace FishNet.Connection
             _serverDirtied = false;
         }
     }
-
-
 }

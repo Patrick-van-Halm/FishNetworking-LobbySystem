@@ -12,19 +12,34 @@ namespace FishNet.CodeGenerating.Extension
     {
 
         /// <summary>
-        /// Returns a method in the next base class.
+        /// Returns if a TypeReference is nullable.
         /// </summary>
-        public static MethodReference GetMethodInBase(this TypeReference tr, CodegenSession session, string methodName)
+        public static bool IsNullable(this TypeReference tr, CodegenSession session)
         {
-            return tr.CachedResolve(session).GetMethodInBase(session, methodName);
+            TypeDefinition td = tr.CachedResolve(session);
+            return td.IsNullable();
         }
 
-		/// <summary>
-		/// Makes a GenericInstanceType.
-		/// </summary>
-		public static GenericInstanceType MakeGenericInstanceType(this TypeReference self)
+        /// <summary>
+        /// Returns the fullname of a TypeReference without <>.
+        /// </summary>
+        /// <param name="tr"></param>
+        /// <returns></returns>
+        public static string GetFullnameWithoutBrackets(this TypeReference tr)
+        {
+            string str = tr.FullName;
+            str = str.Replace("<", "");
+            str = str.Replace(">", "");
+            return str;
+        }
+
+
+        /// <summary>
+        /// Makes a GenericInstanceType.
+        /// </summary>
+        public static GenericInstanceType MakeGenericInstanceType(this TypeReference self)
 		{
-			GenericInstanceType instance = new GenericInstanceType(self);
+			GenericInstanceType instance = new(self);
 			foreach (GenericParameter argument in self.GenericParameters)
 				instance.GenericArguments.Add(argument);
 

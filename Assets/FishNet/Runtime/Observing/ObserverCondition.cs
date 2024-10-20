@@ -1,6 +1,8 @@
 ﻿using FishNet.Connection;
 using FishNet.Managing.Server;
 using FishNet.Object;
+using System;
+using GameKit.Dependencies.Utilities.Types;
 using UnityEngine;
 
 namespace FishNet.Observing
@@ -9,7 +11,7 @@ namespace FishNet.Observing
     /// Condition a connection must meet to be added as an observer.
     /// This class can be inherited from for custom conditions.
     /// </summary>
-    public abstract class ObserverCondition : ScriptableObject
+    public abstract class ObserverCondition : ScriptableObject, IOrderable
     {
         #region Public.
         /// <summary>
@@ -19,6 +21,17 @@ namespace FishNet.Observing
         public NetworkObject NetworkObject;
         #endregion
 
+        #region Serialized.
+        /// <summary>
+        /// Order in which conditions are added to the NetworkObserver. Lower values will added first, resulting in the condition being checked first. Timed conditions will never check before non-timed conditions.
+        /// </summary>
+        public int Order => _addOrder;
+        [Tooltip("Order in which conditions are added to the NetworkObserver. Lower values will added first, resulting in the condition being checked first. Timed conditions will never check before non-timed conditions.")]
+        [SerializeField]
+        [Range(sbyte.MinValue, sbyte.MaxValue)]
+        private sbyte _addOrder;
+        #endregion
+        
         #region Private.
         /// <summary>
         /// True if this condition is enabled.
@@ -54,10 +67,18 @@ namespace FishNet.Observing
         /// <summary>
         /// Initializes this script for use.
         /// </summary>
-        /// <param name="networkObject"></param>
-        public virtual void InitializeOnce(NetworkObject networkObject)
+        /// <param name="networkObject">NetworkObject this condition is initializing for.</param>
+        public virtual void Initialize(NetworkObject networkObject)
         {
             NetworkObject = networkObject;
+        }
+        /// <summary>
+        /// Deinitializes this script.
+        /// </summary>
+        /// <param name="destroyed">True if the object is being destroyed, false if being despawned. An object may deinitialize for despawn, then destroy after.</param>
+        public virtual void Deinitialize(bool destroyed)
+        {
+            NetworkObject = null;
         }
         /// <summary>
         /// Returns if the object which this condition resides should be visible to connection.
@@ -67,15 +88,9 @@ namespace FishNet.Observing
         /// <param name="notProcessed">True if the condition was not processed. This can be used to skip processing for performance. While output as true this condition result assumes the previous ConditionMet value.</param>
         public abstract bool ConditionMet(NetworkConnection connection, bool currentlyAdded, out bool notProcessed);
         /// <summary>
-        /// True if the condition requires regular updates.
+        /// Type of condition this is. Certain types are handled different, such as Timed which are checked for changes at timed intervals.
         /// </summary>
         /// <returns></returns>
-        public abstract bool Timed();
-        /// <summary>
-        /// Creates a clone of this condition to be instantiated.
-        /// </summary>
-        /// <returns></returns>
-        public abstract ObserverCondition Clone();
-
+        public abstract ObserverConditionType GetConditionType();
     }
 }

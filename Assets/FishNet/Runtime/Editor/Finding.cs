@@ -1,5 +1,5 @@
 ﻿#if UNITY_EDITOR
-using FishNet.Utility.Constant;
+using FishNet.Utility;
 using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
@@ -25,7 +25,7 @@ namespace FishNet.Editing
         /// Sets FishNet assembly paths.
         /// </summary>
         /// <param name="error"></param>
-        private static void SetPaths(bool error)
+        private static void UpdateFishNetPaths()
         {
             if (_fishNetGeneratedPath != string.Empty && _fishNetRuntimePath != string.Empty)
                 return;
@@ -51,25 +51,6 @@ namespace FishNet.Editing
                     return;
             }
         }
-        /// <summary>
-        /// Gets path for where the FishNet.Runtime assembly is.
-        /// </summary>
-        /// <returns></returns>
-        public static string GetFishNetRuntimePath(bool error)
-        {
-            SetPaths(error);
-            return _fishNetRuntimePath;
-        }
-        /// <summary>
-        /// Gets path for where the FishNet.Generated assembly is.
-        /// </summary>
-        /// <param name="error"></param>
-        /// <returns></returns>
-        public static string GetFishNetGeneratedPath(bool error)
-        {
-            SetPaths(error);
-            return _fishNetGeneratedPath;
-        }
 
         /// <summary>
         /// Gets all GameObjects in Assets and optionally scenes.
@@ -78,10 +59,12 @@ namespace FishNet.Editing
         /// <returns></returns>
         public static List<GameObject> GetGameObjects(bool userAssemblies, bool fishNetAssembly, bool includeScenes, string[] ignoredPaths = null)
         {
-            List<GameObject> results = new List<GameObject>();
+            List<GameObject> results = new();
 
             string[] guids;
             string[] objectPaths;
+
+            UpdateFishNetPaths();
 
             guids = AssetDatabase.FindAssets("t:GameObject", null);
             objectPaths = new string[guids.Length];
@@ -126,7 +109,7 @@ namespace FishNet.Editing
         /// <returns></returns>
         private static List<GameObject> GetSceneGameObjects()
         {
-            List<GameObject> results = new List<GameObject>();
+            List<GameObject> results = new();
 
             for (int i = 0; i < SceneManager.sceneCount; i++)
                 results.AddRange(GetSceneGameObjects(SceneManager.GetSceneAt(i)));
@@ -138,15 +121,15 @@ namespace FishNet.Editing
         /// </summary>
         private static List<GameObject> GetSceneGameObjects(Scene s)
         {
-            List<GameObject> results = new List<GameObject>();
-            List<Transform> buffer = new List<Transform>();
+            List<GameObject> results = new();
+            List<Transform> buffer = new();
             //Iterate all root objects for the scene.
             GameObject[] gos = s.GetRootGameObjects();
             for (int i = 0; i < gos.Length; i++)
             {
                 /* Get GameObjects within children of each
                  * root object then add them to the cache. */
-                gos[i].GetComponentsInChildren<Transform>(true, buffer);
+                gos[i].GetComponentsInChildren(true, buffer);
                 foreach (Transform t in buffer)
                     results.Add(t.gameObject);
             }
@@ -163,7 +146,7 @@ namespace FishNet.Editing
         public static List<UnityEngine.Object> GetScriptableObjects<T>(bool fishNetAssembly, bool breakOnFirst = false)
         {
             System.Type tType = typeof(T);
-            List<UnityEngine.Object> results = new List<UnityEngine.Object>();
+            List<UnityEngine.Object> results = new();
 
             string[] guids = AssetDatabase.FindAssets("t:ScriptableObject", new string[] { "Assets" });
             string[] objectPaths = new string[guids.Length];
@@ -173,7 +156,7 @@ namespace FishNet.Editing
 
             /* This might be faster than using directory comparers.
              * Don't really care since this occurs only at edit. */
-            List<string> fishNetPaths = new List<string>();
+            List<string> fishNetPaths = new();
             fishNetPaths.Add(_fishNetGeneratedPath.Replace(@"/", @"\"));
             fishNetPaths.Add(_fishNetGeneratedPath.Replace(@"\", @"/"));
             fishNetPaths.Add(_fishNetRuntimePath.Replace(@"/", @"\"));

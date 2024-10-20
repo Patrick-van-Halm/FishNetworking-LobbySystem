@@ -1,7 +1,9 @@
 ﻿
+using FishNet.CodeGenerating.Extension;
 using FishNet.CodeGenerating.Helping;
 using FishNet.CodeGenerating.Helping.Extension;
 using FishNet.Serializing;
+using FishNet.Serializing.Helping;
 using MonoFN.Cecil;
 using MonoFN.Cecil.Cil;
 using System.Collections.Generic;
@@ -35,7 +37,7 @@ namespace FishNet.CodeGenerating.Processing
                 ExtensionType extensionType = GetExtensionType(methodDef);
                 if (extensionType == ExtensionType.None)
                     continue;
-                if (base.GetClass<GeneralHelper>().CodegenExclude(methodDef))
+                if (base.GetClass<GeneralHelper>().HasNotSerializableAttribute(methodDef))
                     continue;
 
                 MethodReference methodRef = base.ImportReference(methodDef);
@@ -63,7 +65,7 @@ namespace FishNet.CodeGenerating.Processing
         {
             bool modified = false;
 
-            List<(MethodDefinition, ExtensionType)> declaredMethods = new List<(MethodDefinition, ExtensionType)>();
+            List<(MethodDefinition, ExtensionType)> declaredMethods = new();
             /* Go through all custom serializers again and see if 
              * they use any types that the user didn't make a serializer for
              * and that there isn't a built-in type for. Create serializers
@@ -73,7 +75,7 @@ namespace FishNet.CodeGenerating.Processing
                 ExtensionType extensionType = GetExtensionType(methodDef);
                 if (extensionType == ExtensionType.None)
                     continue;
-                if (base.GetClass<GeneralHelper>().CodegenExclude(methodDef))
+                if (base.GetClass<GeneralHelper>().HasNotSerializableAttribute(methodDef))
                     continue;
 
                 declaredMethods.Add((methodDef, extensionType));
@@ -99,6 +101,56 @@ namespace FishNet.CodeGenerating.Processing
             for (int i = 0; i < methodDef.Body.Instructions.Count; i++)
                 CheckToModifyInstructions(extensionType, methodDef, ref i);
         }
+
+        /// <summary>
+        /// Creates delegates for custom comparers.
+        /// </summary>
+        internal bool CreateComparerDelegates(TypeDefinition typeDef)
+        {
+            bool modified = false;
+            GeneralHelper gh = base.GetClass<GeneralHelper>();
+            /* Find all declared methods and register delegates to them.
+             * After they are all registered create any custom writers
+             * needed to complete the declared methods. It's important to
+             * make generated writers after so that a generated method
+             * isn't made for a type when the user has already made a declared one. */
+            foreach (MethodDefinition methodDef in typeDef.Methods)
+            {
+                if (gh.HasNotSerializableAttribute(methodDef))
+                    continue;
+                if (!methodDef.HasCustomAttribute<CustomComparerAttribute>())
+                    continue;
+                //Validate return type.
+                if (methodDef.ReturnType.FullName != gh.GetTypeReference(typeof(bool)).FullName)
+                {
+                    base.LogError($"Comparer method {methodDef.Name} in type {typeDef.FullName} must return bool.");
+                    continue;
+                }
+                /* Make sure parameters are correct. */
+                //Invalid count.
+                if (methodDef.Parameters.Count != 2)
+                {
+                    base.LogError($"Comparer method {methodDef.Name} in type {typeDef.FullName} must have exactly two parameters, each of the same type which is being compared.");
+                    continue;
+                }
+                TypeReference p0Tr = methodDef.Parameters[0].ParameterType;
+                TypeReference p1Tr = methodDef.Parameters[0].ParameterType;
+                //Not the same types.
+                if (p0Tr != p1Tr)
+                {
+                    base.LogError($"Both parameters must be the same type in comparer method {methodDef.Name} in type {typeDef.FullName}.");
+                    continue;
+                }
+
+                base.ImportReference(methodDef);
+                base.ImportReference(p0Tr);
+                gh.RegisterComparerDelegate(methodDef, p0Tr);
+                gh.CreateComparerDelegate(methodDef, p0Tr);
+            }
+
+            return modified;
+        }
+
 
         /// <summary>
         /// Checks if instructions need to be modified and does so.
@@ -169,23 +221,25 @@ namespace FishNet.CodeGenerating.Processing
 
 
         /// <summary>
-        /// Creates a reader or writer for parameterType.
+        /// Creates a reader or writer for parameterType if needed. Otherwise calls existing reader.
         /// </summary>
-        /// <param name="extensionType"></param>
-        /// <param name="methodDef"></param>
-        /// <param name="instructionIndex"></param>
-        /// <param name="parameterType"></param>
         private void CreateReaderOrWriter(ExtensionType extensionType, MethodDefinition methodDef, ref int instructionIndex, TypeReference parameterType)
         {
+            ReaderProcessor rp = base.GetClass<ReaderProcessor>();
+            WriterProcessor wp = base.GetClass<WriterProcessor>();
+            ////If parameterType has user declared do nothing.
+            //if (wp.IsGlobalSerializer(parameterType))
+            //    return;
+
             if (!parameterType.IsGenericParameter && parameterType.CanBeResolved(base.Session))
             {
                 TypeDefinition typeDefinition = parameterType.CachedResolve(base.Session);
                 //If class and not value type check for accessible constructor.
                 if (typeDefinition.IsClass && !typeDefinition.IsValueType)
                 {
-                    MethodDefinition constructor = typeDefinition.GetMethod(".ctor");
+                    MethodDefinition constructor = typeDefinition.GetDefaultConstructor(base.Session);
                     //Constructor is inaccessible, cannot create serializer for type.
-                    if (!constructor.IsPublic)
+                    if (constructor != null && !constructor.IsPublic)
                     {
                         base.LogError($"Unable to generator serializers for {typeDefinition.FullName} because it's constructor is not public.");
                         return;
@@ -196,8 +250,9 @@ namespace FishNet.CodeGenerating.Processing
 
                 //Find already existing read or write method.
                 MethodReference createdMethodRef = (extensionType == ExtensionType.Write) ?
-                    base.GetClass<WriterProcessor>().GetWriteMethodReference(parameterType) :
-                    base.GetClass<ReaderProcessor>().GetReadMethodReference(parameterType);
+                    wp.GetWriteMethodReference(parameterType) :
+                    rp.GetReadMethodReference(parameterType);
+
                 //If a created method already exist nothing further is required.
                 if (createdMethodRef != null)
                 {
@@ -209,28 +264,20 @@ namespace FishNet.CodeGenerating.Processing
                 else
                 {
                     createdMethodRef = (extensionType == ExtensionType.Write) ?
-                        base.GetClass<WriterProcessor>().CreateWriter(parameterType) :
-                        base.GetClass<ReaderProcessor>().CreateReader(parameterType);
+                        wp.CreateWriter(parameterType) :
+                        rp.CreateReader(parameterType);
                 }
 
                 //If method was created.
                 if (createdMethodRef != null)
                 {
-                    /* If an autopack type then we have to inject the
-                     * autopack above the new instruction. */
-                    if (base.GetClass<WriterProcessor>().IsAutoPackedType(parameterType))
-                    {
-                        AutoPackType packType = base.GetClass<GeneralHelper>().GetDefaultAutoPackType(parameterType);
-                        Instruction autoPack = processor.Create(OpCodes.Ldc_I4, (int)packType);
-                        methodDef.Body.Instructions.Insert(instructionIndex, autoPack);
-                        instructionIndex++;
-                    }
+                    //Set new instruction.
                     Instruction newInstruction = processor.Create(OpCodes.Call, createdMethodRef);
                     methodDef.Body.Instructions[instructionIndex] = newInstruction;
                 }
             }
-        }
 
+        }
 
         /// <summary>
         /// Returns the RPC attribute on a method, if one exist. Otherwise returns null.
@@ -260,7 +307,7 @@ namespace FishNet.CodeGenerating.Processing
 #endif
 
 
-            string prefix = (write) ? WriterProcessor.WRITE_PREFIX : ReaderProcessor.READ_PREFIX;
+            string prefix = (write) ? WriterProcessor.CUSTOM_WRITER_PREFIX : ReaderProcessor.CUSTOM_READER_PREFIX;
 
             //Does not contain prefix.
             if (methodDef.Name.Length < prefix.Length || methodDef.Name.Substring(0, prefix.Length) != prefix)
