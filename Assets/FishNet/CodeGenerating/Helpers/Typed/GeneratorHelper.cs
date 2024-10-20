@@ -1,4 +1,5 @@
-﻿using FishNet.CodeGenerating.Helping.Extension;
+﻿using FishNet.CodeGenerating.Extension;
+using FishNet.CodeGenerating.Helping.Extension;
 using FishNet.Object;
 using FishNet.Serializing.Helping;
 using FishNet.Utility.Performance;
@@ -49,7 +50,7 @@ namespace FishNet.CodeGenerating.Helping
             {
                 foreach (CustomAttribute item in objectTd.CustomAttributes)
                 {
-                    if (item.AttributeType.Is(typeof(CodegenExcludeAttribute)))
+                    if (item.AttributeType.Is(typeof(ExcludeSerializationAttribute)))
                         return SerializerType.Invalid;
                 }
             }
@@ -57,7 +58,7 @@ namespace FishNet.CodeGenerating.Helping
             //By reference.            
             if (objectTr.IsByReference)
             {
-                base.LogError($"{errorPrefix}Cannot pass {objectTr.Name} by reference");
+                base.LogError($"{errorPrefix}Cannot pass {objectTr.Name} by reference.");
                 return SerializerType.Invalid;
             }
             /* Arrays have to be processed first because it's possible for them to meet other conditions
@@ -66,7 +67,7 @@ namespace FishNet.CodeGenerating.Helping
             {
                 if (objectTr.IsMultidimensionalArray())
                 {
-                    base.LogError($"{errorPrefix}{objectTr.Name} is an unsupported type. Multidimensional arrays are not supported");
+                    base.LogError($"{errorPrefix}{objectTr.Name} is an unsupported type. Multidimensional arrays are not supported.");
                     return SerializerType.Invalid;
                 }
                 else
@@ -87,15 +88,11 @@ namespace FishNet.CodeGenerating.Helping
             {
                 return SerializerType.List;
             }
-            else if (objectTd.Is(typeof(ListCache<>)))
-            {
-                return SerializerType.ListCache;
-            }
             else if (objectTd.InheritsFrom<NetworkBehaviour>(base.Session))
             {
                 return SerializerType.NetworkBehaviour;
             }
-            else if (objectTr.Name == typeof(System.Nullable<>).Name)
+            else if (objectTr.IsNullable(base.Session))
             {
                 GenericInstanceType git = objectTr as GenericInstanceType;
                 if (git == null || git.GenericArguments.Count != 1)

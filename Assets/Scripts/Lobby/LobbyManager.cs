@@ -11,13 +11,14 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.SceneManagement;
+using GameKit.Dependencies.Utilities.Types;
 
 public class LobbyManager : SingletonNetworkBehaviour<LobbyManager>
 {
     [Header("Scene Settings")]
     [SerializeField, Min(1)] private int _maxPooledScenes = 1;
-    [FishNet.Utility.Scene, SerializeField] private string _lobbyScene;
-    [FishNet.Utility.Scene, SerializeField] private string _gameScene;
+    [GameKit.Dependencies.Utilities.Types.Scene, SerializeField] private string _lobbyScene;
+    [Scene, SerializeField] private string _gameScene;
 
     [Header("Lobby Settings")]
     [Min(1)] public int MaxLobbyClients = 1;
@@ -154,7 +155,7 @@ public class LobbyManager : SingletonNetworkBehaviour<LobbyManager>
         sld.Options.LocalPhysics = LocalPhysicsMode.Physics3D;
         sld.ReplaceScenes = ReplaceOption.All;
         sld.MovedNetworkObjects = new NetworkObject[] { client.Objects.ElementAt(0) };
-        sld.PreferredActiveScene = new SceneLookupData(lobby.Scene);
+        sld.PreferredActiveScene = new PreferredScene(sld.SceneLookupDatas[0]);
         InstanceFinder.SceneManager.LoadConnectionScenes(client, sld);
     }
 
@@ -167,7 +168,7 @@ public class LobbyManager : SingletonNetworkBehaviour<LobbyManager>
         sld.Options.LocalPhysics = LocalPhysicsMode.Physics3D;
         sld.ReplaceScenes = ReplaceOption.All;
         sld.MovedNetworkObjects = lobby.Clients.Select(c => c.Objects.ElementAt(0)).ToArray();
-        sld.PreferredActiveScene = new SceneLookupData(lobby.Scene);
+        sld.PreferredActiveScene = new PreferredScene(sld.SceneLookupDatas[0]);
         InstanceFinder.SceneManager.LoadConnectionScenes(lobby.Clients, sld);
     }
     #endregion

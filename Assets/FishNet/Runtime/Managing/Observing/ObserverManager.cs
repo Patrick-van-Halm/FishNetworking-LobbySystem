@@ -1,13 +1,18 @@
-﻿using FishNet.Connection; //remove on 2023/01/01 move to correct folder.
+﻿using FishNet.Component.Observing;
+using FishNet.Connection;
 using FishNet.Object;
 using FishNet.Observing;
+using FishNet.Utility;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 using UnityEngine.Serialization;
 
+[assembly: InternalsVisibleTo(UtilityConstants.DEMOS_ASSEMBLY_NAME)]
+[assembly: InternalsVisibleTo(UtilityConstants.TEST_ASSEMBLY_NAME)]
+
 namespace FishNet.Managing.Observing
 {
-
     /// <summary>
     /// Additional options for managing the observer system.
     /// </summary>
@@ -17,13 +22,6 @@ namespace FishNet.Managing.Observing
     {
         #region Serialized.
         /// <summary>
-        /// 
-        /// </summary>
-        [Tooltip("True to update visibility for clientHost based on if they are an observer or not.")]
-        [FormerlySerializedAs("_setHostVisibility")]
-        [SerializeField]
-        private bool _updateHostVisibility = true;
-        /// <summary>
         /// True to update visibility for clientHost based on if they are an observer or not.
         /// </summary>
         public bool UpdateHostVisibility
@@ -31,16 +29,57 @@ namespace FishNet.Managing.Observing
             get => _updateHostVisibility;
             private set => _updateHostVisibility = value;
         }
+
+        [Tooltip("True to update visibility for clientHost based on if they are an observer or not.")]
+        [SerializeField]
+        private bool _updateHostVisibility = true;
+
+        /// <summary>
+        /// Maximum duration the server will take to update timed observer conditions as server load increases. Lower values will result in timed conditions being checked quicker at the cost of performance..
+        /// </summary>
+        public float MaximumTimedObserversDuration
+        {
+            get => _maximumTimedObserversDuration;
+            private set => _maximumTimedObserversDuration = value;
+        }
+
+        [Tooltip("Maximum duration the server will take to update timed observer conditions as server load increases. Lower values will result in timed conditions being checked quicker at the cost of performance.")]
+        [SerializeField]
+        [Range(MINIMUM_TIMED_OBSERVERS_DURATION, MAXIMUM_TIMED_OBSERVERS_DURATION)]
+        private float _maximumTimedObserversDuration = 10f;
+
+        /// <summary>
+        /// Sets the MaximumTimedObserversDuration value.
+        /// </summary>
+        /// <param name="value">New maximum duration to update timed observers over.</param>
+        public void SetMaximumTimedObserversDuration(float value) => MaximumTimedObserversDuration = System.Math.Clamp(value, MINIMUM_TIMED_OBSERVERS_DURATION, MAXIMUM_TIMED_OBSERVERS_DURATION);
+
         /// <summary>
         /// 
         /// </summary>
         [Tooltip("Default observer conditions for networked objects.")]
         [SerializeField]
-        private List<ObserverCondition> _defaultConditions = new List<ObserverCondition>();
+        private List<ObserverCondition> _defaultConditions = new();
+
+        #endregion
+
+        #region Private.
+
         /// <summary>
         /// NetworkManager on object.
         /// </summary>
         private NetworkManager _networkManager;
+        #endregion
+
+        #region Consts.
+        /// <summary>
+        /// Minimum time allowed for timed observers to rebuild.
+        /// </summary>
+        private const float MINIMUM_TIMED_OBSERVERS_DURATION = 0.1f;
+        /// <summary>
+        /// Maxmimum time allowed for timed observers to rebuild.
+        /// </summary>
+        private const float MAXIMUM_TIMED_OBSERVERS_DURATION = 20f;
         #endregion
 
         /// <summary>
@@ -50,6 +89,8 @@ namespace FishNet.Managing.Observing
         internal void InitializeOnce_Internal(NetworkManager manager)
         {
             _networkManager = manager;
+            //Update the current value to itself so it becomes clamped. This is just to protect against the user manually setting it outside clamp somehow.
+            SetMaximumTimedObserversDuration(MaximumTimedObserversDuration);
         }
 
         /// <summary>
@@ -71,7 +112,7 @@ namespace FishNet.Managing.Observing
 
             /* If to update spawned as well then update all networkobservers
              * with the setting and also update renderers. */
-            if (_networkManager.IsServer && HostVisibilityUpdateContains(updateType, HostVisibilityUpdateTypes.Spawned))
+            if (_networkManager.IsServerStarted && HostVisibilityUpdateContains(updateType, HostVisibilityUpdateTypes.Spawned))
             {
                 NetworkConnection clientConn = _networkManager.ClientManager.Connection;
                 foreach (NetworkObject n in _networkManager.ServerManager.Objects.Spawned.Values)
@@ -99,7 +140,7 @@ namespace FishNet.Managing.Observing
             bool obsAdded;
 
             NetworkObserver result;
-            if (!nob.TryGetComponent<NetworkObserver>(out result))
+            if (!nob.TryGetComponent(out result))
             {
                 obsAdded = true;
                 result = nob.gameObject.AddComponent<NetworkObserver>();
@@ -172,6 +213,7 @@ namespace FishNet.Managing.Observing
 
             return result;
         }
-    }
 
+
+    }
 }

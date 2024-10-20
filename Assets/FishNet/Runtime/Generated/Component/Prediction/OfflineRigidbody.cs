@@ -1,33 +1,17 @@
 ﻿using FishNet.Managing.Predicting;
-using FishNet.Managing.Timing;
-using FishNet.Object;
 using UnityEngine;
 
 namespace FishNet.Component.Prediction
 {
     public partial class OfflineRigidbody : MonoBehaviour
     {
-
         #region Serialized.
         /// <summary>
         /// Type of prediction movement which is being used.
         /// </summary>
         [Tooltip("Type of prediction movement which is being used.")]
         [SerializeField]
-        private RigidbodyType _rigidbodyType;
-        /// <summary>
-        /// GraphicalObject to unparent when pausing.
-        /// </summary>
-        private Transform _graphicalObject;
-        /// <summary>
-        /// Sets GraphicalObject.
-        /// </summary>
-        /// <param name="value"></param>
-        public void SetGraphicalObject(Transform value)
-        {
-            _graphicalObject = value;
-            UpdateRigidbodies();
-        }               
+        private RigidbodyType _rigidbodyType;  
         /// <summary>
         /// True to also get rigidbody components within children.
         /// </summary>
@@ -40,13 +24,12 @@ namespace FishNet.Component.Prediction
         /// <summary>
         /// Pauser for rigidbodies.
         /// </summary>
-        private RigidbodyPauser _rigidbodyPauser = new RigidbodyPauser();
+        private RigidbodyPauser _rigidbodyPauser = new();
         /// <summary>
         /// TimeManager subscribed to.
         /// </summary>
         private PredictionManager _predictionManager;
         #endregion
-
 
         private void Awake()
         {
@@ -70,7 +53,7 @@ namespace FishNet.Component.Prediction
         }
 
         /// <summary>
-        /// Sets a new TimeManager to use.
+        /// Sets a new PredictionManager to use.
         /// </summary>
         /// <param name="tm"></param>
         public void SetPredictionManager(PredictionManager pm)
@@ -90,7 +73,7 @@ namespace FishNet.Component.Prediction
         /// </summary>
         public void UpdateRigidbodies()
         {
-            _rigidbodyPauser.UpdateRigidbodies(transform, _rigidbodyType, _getInChildren, _graphicalObject);
+            _rigidbodyPauser.UpdateRigidbodies(transform, _rigidbodyType, _getInChildren);
         }
 
         /// <summary>
@@ -113,18 +96,19 @@ namespace FishNet.Component.Prediction
             }
         }
 
-        private void _predictionManager_OnPreReconcile(NetworkBehaviour obj)
+        private void _predictionManager_OnPreReconcile(uint clientTick, uint serverTick)
         {
-            //Make rbs all kinematic/!simulated before reconciling, which would also result in replays.
             _rigidbodyPauser.Pause();
         }
 
-        private void _predictionManager_OnPostReconcile(NetworkBehaviour obj)
+        private void _predictionManager_OnPostReconcile(uint clientTick, uint serverTick)
         {
             _rigidbodyPauser.Unpause();
         }
-
     }
 
 
 }
+
+
+

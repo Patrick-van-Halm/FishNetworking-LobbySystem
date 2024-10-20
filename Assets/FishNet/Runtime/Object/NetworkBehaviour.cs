@@ -1,26 +1,33 @@
-﻿using FishNet.Documenting;
+﻿using FishNet.CodeGenerating;
+using FishNet.Documenting;
+using FishNet.Managing.Transporting;
 using FishNet.Serializing.Helping;
-using FishNet.Utility.Constant;
+using FishNet.Utility;
 using System.Runtime.CompilerServices;
+using FishNet.Managing;
 using UnityEngine;
 
 [assembly: InternalsVisibleTo(UtilityConstants.CODEGEN_ASSEMBLY_NAME)]
+
 namespace FishNet.Object
 {
     /// <summary>
     /// Scripts which inherit from NetworkBehaviour can be used to gain insight of, and perform actions on the network.
     /// </summary>
+    [ExcludeSerialization]
     public abstract partial class NetworkBehaviour : MonoBehaviour
     {
+        #region Public.
         /// <summary>
         /// True if this NetworkBehaviour is initialized for the network.
         /// </summary>
         public bool IsSpawned => _networkObjectCache.IsSpawned;
+
         /// <summary>
         /// 
         /// </summary>
         [SerializeField, HideInInspector]
-        private byte _componentIndexCache = byte.MaxValue;
+        private byte _componentIndexCache = NetworkBehaviour.UNSET_NETWORKBEHAVIOUR_ID;
         /// <summary>
         /// ComponentIndex for this NetworkBehaviour.
         /// </summary>
@@ -35,28 +42,90 @@ namespace FishNet.Object
         /// </summary>
         [SerializeField, HideInInspector]
         private NetworkObject _addedNetworkObject;
-#endif 
+#endif
+        /// <summary>
+        /// Cache of the TransportManager.
+        /// </summary>
+        private TransportManager _transportManagerCache;
         /// <summary>
         /// 
         /// </summary>
         [SerializeField, HideInInspector]
         private NetworkObject _networkObjectCache;
+
         /// <summary>
         /// NetworkObject this behaviour is for.
         /// </summary>
         public NetworkObject NetworkObject => _networkObjectCache;
+        #endregion
+
+        #region Private.
+        /// <summary>
+        /// True if initialized at some point asServer.
+        /// </summary>
+        private bool _initializedOnceServer;
+#pragma warning disable CS0414
+        /// <summary>
+        /// True if initialized at some point not asServer.
+        /// </summary>
+        private bool _initializedOnceClient;
+#pragma warning restore CS0414
+        #endregion
+
+        #region Consts.
+        /// <summary>
+        /// Maximum number of allowed added NetworkBehaviours.
+        /// </summary>
+        public const byte MAXIMUM_NETWORKBEHAVIOURS = (UNSET_NETWORKBEHAVIOUR_ID - 1);
+        /// <summary>
+        /// Id for when a NetworkBehaviour is not valid.
+        /// </summary>
+        public const byte UNSET_NETWORKBEHAVIOUR_ID = byte.MaxValue;
+        #endregion
 
         /// <summary>
-        /// Initializes this script. This will only run once even as host.
+        /// Outputs data about this NetworkBehaviour to string.
         /// </summary>
-        /// <param name="networkObject"></param>
-        /// <param name="componentIndex"></param>
-        internal void InitializeOnce_Internal()
+        /// <returns></returns>
+        public override string ToString()
         {
-            InitializeOnceSyncTypes();
-            InitializeOnceRpcLinks();
+            return $"Name [{gameObject.name}] ComponentId [{ComponentIndex}] NetworkObject Name [{_networkObjectCache.name}] NetworkObject Id [{_networkObjectCache.ObjectId}]";
         }
 
+        /// <summary>
+        /// Preinitializes this script for the network.
+        /// </summary>
+        internal void Preinitialize_Internal(NetworkObject nob, bool asServer)
+        {
+            _transportManagerCache = nob.TransportManager;
+            SyncTypes_Preinitialize(asServer);
+
+            if (asServer)
+            {
+                InitializeRpcLinks();
+                _initializedOnceServer = true;
+            }
+            else
+            {
+                if (!_initializedOnceClient && nob.EnablePrediction)
+                    nob.RegisterPredictionBehaviourOnce(this);
+
+                _initializedOnceClient = true;
+            }
+        }
+
+        internal void Deinitialize(bool asServer)
+        {
+            ResetState_SyncTypes(asServer);
+        }
+
+        /// <summary>
+        /// Called by the NetworkObject when this object is destroyed.
+        /// </summary>
+        internal void NetworkBehaviour_OnDestroy()
+        {
+            SyncTypes_OnDestroy();
+        }
 
         /// <summary>
         /// Serializes information for network components.
@@ -77,10 +146,11 @@ namespace FishNet.Object
 
             NetworkInitializeIfDisabled();
         }
+
         /// <summary>
         /// Long name is to prevent users from potentially creating their own method named the same.
         /// </summary>
-        [CodegenMakePublic]
+        [MakePublic]
         [APIExclude]
         internal virtual void NetworkInitializeIfDisabled() { }
 
@@ -99,7 +169,7 @@ namespace FishNet.Object
         {
 #if UNITY_EDITOR
             if (Application.isPlaying)
-                return; 
+                return;
 
             TryAddNetworkObject();
 #endif
@@ -108,13 +178,13 @@ namespace FishNet.Object
         /// <summary>
         /// Resets this NetworkBehaviour so that it may be added to an object pool.
         /// </summary>
-        internal void ResetForObjectPool()
+        public virtual void ResetState(bool asServer)
         {
-            ResetSyncTypes();
+            ResetState_SyncTypes(asServer);
+            ResetState_Prediction(asServer);
             ClearReplicateCache();
             ClearBuffedRpcs();
         }
-
 
         /// <summary>
         /// Tries to add the NetworkObject component.
@@ -139,7 +209,7 @@ namespace FishNet.Object
 
             while (climb != null)
             {
-                if (climb.TryGetComponent<NetworkObject>(out result))
+                if (climb.TryGetComponent(out result))
                     break;
                 else
                     climb = climb.parent;
@@ -153,7 +223,7 @@ namespace FishNet.Object
             else
             {
                 _addedNetworkObject = transform.root.gameObject.AddComponent<NetworkObject>();
-                Debug.Log($"Script {GetType().Name} on object {gameObject.name} added a NetworkObject component to {transform.root.name}.");
+                NetworkManagerExtensions.Log($"Script {GetType().Name} on object {gameObject.name} added a NetworkObject component to {transform.root.name}.");
             }
 
             AlertToDuplicateNetworkObjects(_addedNetworkObject.transform);
@@ -165,10 +235,10 @@ namespace FishNet.Object
                 NetworkObject[] nobs = t.GetComponents<NetworkObject>();
                 //This shouldn't be possible but does occur sometimes; maybe a unity bug?
                 if (nobs.Length > 1)
-                { 
+                {
                     //Update added to first entryt.
                     _addedNetworkObject = nobs[0];
- 
+
                     string useMenu = " You may also use the Fish-Networking menu to automatically remove duplicate NetworkObjects.";
                     string sceneName = t.gameObject.scene.name;
                     if (string.IsNullOrEmpty(sceneName))
@@ -176,15 +246,11 @@ namespace FishNet.Object
                     else
                         Debug.LogError($"Object {t.name} in scene {sceneName} has multiple NetworkObject components. Please remove the extra component(s) to prevent errors.{useMenu}");
                 }
-
-            } 
+            }
 #else
             return null;
 #endif
         }
-
         #endregion
     }
-
-
 }

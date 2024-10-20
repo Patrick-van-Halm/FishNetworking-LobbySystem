@@ -45,15 +45,15 @@ namespace FishNet.CodeGenerating.Helping
         /// Gets the first public constructor with no parameters.
         /// </summary>
         /// <returns></returns>
-        public static MethodDefinition GetConstructor(this TypeReference typeRef, CodegenSession session)
+        public static MethodDefinition GetDefaultConstructor(this TypeReference typeRef, CodegenSession session)
         {
-            return typeRef.CachedResolve(session).GetConstructor();
+            return typeRef.CachedResolve(session).GetDefaultConstructor();
         }
         /// <summary>
         /// Gets the first public constructor with no parameters.
-        /// </summary>
+        /// </summary> 
         /// <returns></returns>
-        public static MethodDefinition GetConstructor(this TypeDefinition typeDef)
+        public static MethodDefinition GetDefaultConstructor(this TypeDefinition typeDef)
         {
             foreach (MethodDefinition methodDef in typeDef.Methods)
             {
@@ -70,7 +70,7 @@ namespace FishNet.CodeGenerating.Helping
         /// <returns></returns>
         public static List<MethodDefinition> GetConstructors(this TypeDefinition typeDef)
         {
-            List<MethodDefinition> lst = new List<MethodDefinition>();
+            List<MethodDefinition> lst = new();
             foreach (MethodDefinition methodDef in typeDef.Methods)
             {
                 if (methodDef.IsConstructor)

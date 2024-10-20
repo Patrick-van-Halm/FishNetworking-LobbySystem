@@ -22,8 +22,11 @@ using FishNet.Utility.Performance;
 using FishNet.Component.ColliderRollback;
 using FishNet.Managing.Predicting;
 using System.Runtime.CompilerServices;
+using GameKit.Dependencies.Utilities;
+
 #if UNITY_EDITOR
 using FishNet.Editing.PrefabCollectionGenerator;
+using UnityEditor;
 #endif
 
 namespace FishNet.Managing
@@ -45,6 +48,7 @@ namespace FishNet.Managing
             ServerFirst,
             ClientFirst
         }
+
         /// <summary>
         /// How to persist with multiple NetworkManagers.
         /// </summary>
@@ -63,7 +67,6 @@ namespace FishNet.Managing
             /// </summary>
             AllowMultiple
         }
-
         #endregion
 
         #region Public.
@@ -71,21 +74,23 @@ namespace FishNet.Managing
         /// True if this instance of the NetworkManager is initialized.
         /// </summary>
         public bool Initialized { get; private set; }
+
         /// <summary>
         /// 
         /// </summary>
-        private static List<NetworkManager> _instances = new List<NetworkManager>();
+        private static List<NetworkManager> _instances = new();
+
         /// <summary>
         /// Currently initialized NetworkManagers.
         /// </summary>
-        public static IReadOnlyCollection<NetworkManager> Instances
+        public static IReadOnlyList<NetworkManager> Instances
         {
             get
             {
                 /* Remove null instances of NetworkManager.
-                * This shouldn't happen because instances are removed
-                * OnDestroy but none the less something is causing
-                * it. */
+                 * This shouldn't happen because instances are removed
+                 * OnDestroy but none the less something is causing
+                 * it. */
                 for (int i = 0; i < _instances.Count; i++)
                 {
                     if (_instances[i] == null)
@@ -94,80 +99,61 @@ namespace FishNet.Managing
                         i--;
                     }
                 }
+
                 return _instances;
             }
         }
 
         /// <summary>
-        /// True if server is active.
-        /// </summary>
-        public bool IsServer => ServerManager.Started;
-        /// <summary>
-        /// True if only the server is active.
-        /// </summary>
-        public bool IsServerOnly => (IsServer && !IsClient);
-        /// <summary>
-        /// True if the client is active and authenticated.
-        /// </summary>
-        public bool IsClient => (ClientManager.Started && ClientManager.Connection.Authenticated);
-        /// <summary>
-        /// True if only the client is active and authenticated.
-        /// </summary>
-        public bool IsClientOnly => (!IsServer && IsClient);
-        /// <summary>
-        /// True if client and server are active.
-        /// </summary>
-        public bool IsHost => (IsServer && IsClient);
-        /// <summary>
-        /// True if client nor server are active.
-        /// </summary>
-        public bool IsOffline => (!IsServer && !IsClient);
-        /// <summary>
         /// PredictionManager for this NetworkManager.
         /// </summary>
         internal PredictionManager PredictionManager { get; private set; }
+
         /// <summary>
         /// ServerManager for this NetworkManager.
         /// </summary>
         public ServerManager ServerManager { get; private set; }
+
         /// <summary>
         /// ClientManager for this NetworkManager.
         /// </summary>
         public ClientManager ClientManager { get; private set; }
+
         /// <summary>
         /// TransportManager for this NetworkManager.
         /// </summary>
         public TransportManager TransportManager { get; private set; }
+
         /// <summary>
         /// TimeManager for this NetworkManager.
         /// </summary>
         public TimeManager TimeManager { get; private set; }
+
         /// <summary>
         /// SceneManager for this NetworkManager.
         /// </summary>
         public SceneManager SceneManager { get; private set; }
+
         /// <summary>
         /// ObserverManager for this NetworkManager.
         /// </summary>
         public ObserverManager ObserverManager { get; private set; }
-        /// <summary>
-        /// Authenticator for this NetworkManager. May be null if no Authenticator is used.
-        /// </summary>
-        [Obsolete("Use ServerManager.GetAuthenticator or ServerManager.SetAuthenticator instead.")] //Remove on 2023/06/01
-        public Authenticator Authenticator => ServerManager.Authenticator;
+
         /// <summary>
         /// DebugManager for this NetworkManager.
         /// </summary>
         public DebugManager DebugManager { get; private set; }
+
         /// <summary>
         /// StatisticsManager for this NetworkManager.
         /// </summary>
         public StatisticsManager StatisticsManager { get; private set; }
+
         /// <summary>
         /// An empty connection reference. Used when a connection cannot be found to prevent object creation.
         /// </summary>
         [APIExclude]
-        public static NetworkConnection EmptyConnection { get; private set; } = new NetworkConnection();
+        public static NetworkConnection EmptyConnection { get; private set; } = new();
         #endregion
 
         #region Internal.
@@ -178,12 +164,14 @@ namespace FishNet.Managing
         #endregion
 
         #region Serialized.
+#if UNITY_EDITOR
         /// <summary>
         /// True to refresh the DefaultPrefabObjects collection whenever the editor enters play mode. This is an attempt to alleviate the DefaultPrefabObjects scriptable object not refreshing when using multiple editor applications such as ParrelSync.
         /// </summary>
         [Tooltip("True to refresh the DefaultPrefabObjects collection whenever the editor enters play mode. This is an attempt to alleviate the DefaultPrefabObjects scriptable object not refreshing when using multiple editor applications such as ParrelSync.")]
         [SerializeField]
         private bool _refreshDefaultPrefabs = false;
+#endif
         /// <summary>
         /// True to have your application run while in the background.
         /// </summary>
@@ -196,9 +184,12 @@ namespace FishNet.Managing
         [Tooltip("True to make this instance DontDestroyOnLoad. This is typical if you only want one NetworkManager.")]
         [SerializeField]
         private bool _dontDestroyOnLoad = true;
+
         /// <summary>
         /// Object pool to use for this NetworkManager. Value may be null.
         /// </summary>
+        public ObjectPool ObjectPool => _objectPool;
+
         [Tooltip("Object pool to use for this NetworkManager. Value may be null.")]
         [SerializeField]
         private ObjectPool _objectPool;
@@ -219,11 +210,14 @@ namespace FishNet.Managing
 
         #region Const.
         /// <summary>
+        /// Version of this release.
+        /// </summary>
+        public const string FISHNET_VERSION = "4.5.1";
+        /// <summary>
         /// Maximum framerate allowed.
         /// </summary>
         internal const ushort MAXIMUM_FRAMERATE = 500;
         #endregion
-
 
         private void Awake()
         {
@@ -232,7 +226,7 @@ namespace FishNet.Managing
                 return;
 
             if (StartingRpcLinkIndex == 0)
-                StartingRpcLinkIndex = (ushort)(EnumFN.GetHighestValue<PacketId>() + 1);
+                StartingRpcLinkIndex = (ushort)(Enums.GetHighestValue<PacketId>() + 1);
 
             bool isDefaultPrefabs = (SpawnablePrefabs != null && SpawnablePrefabs is DefaultPrefabObjects);
 #if UNITY_EDITOR
@@ -266,7 +260,7 @@ namespace FishNet.Managing
                 return;
 
             if (TryGetComponent<NetworkObject>(out _))
-                LogError($"NetworkObject component found on the NetworkManager object {gameObject.name}. This is not allowed and will cause problems. Remove the NetworkObject component from this object.");
+                InternalLogError($"NetworkObject component found on the NetworkManager object {gameObject.name}. This is not allowed and will cause problems. Remove the NetworkObject component from this object.");
 
             SpawnablePrefabs.InitializePrefabRange(0);
             SpawnablePrefabs.SetCollectionId(0);
@@ -312,11 +306,11 @@ namespace FishNet.Managing
             TimeManager.OnLateUpdate += TimeManager_OnLateUpdate;
             SceneManager.InitializeOnce_Internal(this);
             TransportManager.InitializeOnce_Internal(this);
-            ServerManager.InitializeOnce_Internal(this);
             ClientManager.InitializeOnce_Internal(this);
+            ServerManager.InitializeOnce_Internal(this);
             ObserverManager.InitializeOnce_Internal(this);
             RollbackManager.InitializeOnce_Internal(this);
-            PredictionManager.InitializeOnce_Internal(this);
+            PredictionManager.InitializeOnce(this);
             StatisticsManager.InitializeOnce_Internal(this);
             _objectPool.InitializeOnce(this);
         }
@@ -328,7 +322,7 @@ namespace FishNet.Managing
         {
             bool clientStarted = ClientManager.Started;
             bool serverStarted = ServerManager.Started;
-
+            
             int frameRate = 0;
             //If both client and server are started then use whichever framerate is higher.
             if (clientStarted && serverStarted)
@@ -341,8 +335,8 @@ namespace FishNet.Managing
             /* Make sure framerate isn't set to max on server.
              * If it is then default to tick rate. If framerate is
              * less than tickrate then also set to tickrate. */
-#if UNITY_SERVER
-            ushort minimumServerFramerate = (ushort)(TimeManager.TickRate + 1);
+#if UNITY_SERVER && !UNITY_EDITOR
+            ushort minimumServerFramerate = (ushort)(TimeManager.TickRate + 15);
             if (frameRate == MAXIMUM_FRAMERATE)
                 frameRate = minimumServerFramerate;
             else if (frameRate < TimeManager.TickRate)
@@ -359,10 +353,12 @@ namespace FishNet.Managing
         private void TimeManager_OnLateUpdate()
         {
             /* Some reason runinbackground becomes unset
-            * or the setting goes ignored some times when it's set
-            * in awake. Rather than try to fix or care why Unity
-            * does this just set it in LateUpdate(or Update). */
+             * or the setting goes ignored some times when it's set
+             * in awake. Rather than try to fix or care why Unity
+             * does this just set it in LateUpdate(or Update). */
             SetRunInBackground();
+            //Let's object pooler do regular work.
+            _objectPool.LateUpdate();
         }
 
 
@@ -389,7 +385,7 @@ namespace FishNet.Managing
             //If to destroy the newest.
             if (_persistence == PersistenceType.DestroyNewest)
             {
-                Log($"NetworkManager on object {gameObject.name} is being destroyed due to persistence type {_persistence}. A NetworkManager instance already exist on {firstInstance.name}.");
+                InternalLog($"NetworkManager on object {gameObject.name} is being destroyed due to persistence type {_persistence}. A NetworkManager instance already exist on {firstInstance.name}.");
                 Destroy(gameObject);
                 //This one is being destroyed because its the newest.
                 return false;
@@ -397,7 +393,7 @@ namespace FishNet.Managing
             //If to destroy the oldest.
             else if (_persistence == PersistenceType.DestroyOldest)
             {
-                Log($"NetworkManager on object {firstInstance.name} is being destroyed due to persistence type {_persistence}. A NetworkManager instance has been created on {gameObject.name}.");
+                InternalLog($"NetworkManager on object {firstInstance.name} is being destroyed due to persistence type {_persistence}. A NetworkManager instance has been created on {gameObject.name}.");
                 Destroy(firstInstance.gameObject);
                 //This being the new one will persist, allow initialization.
                 return true;
@@ -405,7 +401,7 @@ namespace FishNet.Managing
             //Unhandled.
             else
             {
-                Log($"Persistance type of {_persistence} is unhandled on {gameObject.name}. Initialization will not proceed.");
+                InternalLog($"Persistance type of {_persistence} is unhandled on {gameObject.name}. Initialization will not proceed.");
                 return false;
             }
         }
@@ -419,6 +415,19 @@ namespace FishNet.Managing
             //If null and object is in a scene.
             if (SpawnablePrefabs == null && !string.IsNullOrEmpty(gameObject.scene.name))
             {
+                //First try to fetch the file, only if editor and not in play mode.
+#if UNITY_EDITOR
+                if (!ApplicationState.IsPlaying())
+                {
+                    SpawnablePrefabs = Generator.GetDefaultPrefabObjects();
+                    if (SpawnablePrefabs != null)
+                    {
+                        Debug.Log($"SpawnablePrefabs was set to DefaultPrefabObjects automatically on object {gameObject.name} in scene {gameObject.scene.name}.");
+                        EditorUtility.SetDirty(this);
+                        return true;
+                    }
+                }
+#endif
                 //Always throw an error as this would cause failure.
                 if (print)
                     Debug.LogError($"SpawnablePrefabs is null on {gameObject.name}. Select the NetworkManager in scene {gameObject.scene.name} and choose a prefabs file. Choosing DefaultPrefabObjects will automatically populate prefabs for you.");
@@ -455,7 +464,7 @@ namespace FishNet.Managing
             if (presetValue != null)
                 return presetValue;
 
-            if (gameObject.TryGetComponent<T>(out T result))
+            if (gameObject.TryGetComponent(out T result))
                 return result;
             else
                 return gameObject.AddComponent<T>();
@@ -465,91 +474,46 @@ namespace FishNet.Managing
         /// Clears a client collection after disposing of the NetworkConnections.
         /// </summary>
         /// <param name="clients"></param>
-        internal void ClearClientsCollection(Dictionary<int, NetworkConnection> clients)
+        internal void ClearClientsCollection(Dictionary<int, NetworkConnection> clients, int transportIndex = -1)
         {
-            foreach (NetworkConnection conn in clients.Values)
-                conn.Dispose();
+            //True to dispose all connections.
+            bool disposeAll = (transportIndex < 0);
+            List<int> cache = CollectionCaches<int>.RetrieveList();
 
-            clients.Clear();
-        }
 
-        #region Object pool.
-        /// <summary>
-        /// Returns an instantiated copy of prefab.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public NetworkObject GetPooledInstantiated(NetworkObject prefab, bool asServer)
-        {
-            return GetPooledInstantiated(prefab, 0, asServer);
-        }
-        /// <summary>
-        /// Returns an instantiated copy of prefab.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public NetworkObject GetPooledInstantiated(NetworkObject prefab, ushort collectionId, bool asServer)
-        {
-            return GetPooledInstantiated(prefab.PrefabId, collectionId, asServer);
-        }
-        /// <summary>
-        /// Returns an instantiated copy of prefab.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public NetworkObject GetPooledInstantiated(GameObject prefab, bool asServer)
-        {
-            return GetPooledInstantiated(prefab, 0, asServer);
-        }
-        /// <summary>
-        /// Returns an instantiated copy of prefab.
-        /// </summary>
-        public NetworkObject GetPooledInstantiated(GameObject prefab, ushort collectionId, bool asServer)
-        {
-            NetworkObject nob;
-            if (!prefab.TryGetComponent<NetworkObject>(out nob))
+            foreach (KeyValuePair<int, NetworkConnection> kvp in clients)
             {
-                LogError($"NetworkObject was not found on {prefab}. An instantiated NetworkObject cannot be returned.");
-                return null;
+                NetworkConnection value = kvp.Value;
+                //If to check transport index.
+                if (!disposeAll)
+                {
+                    if (value.TransportIndex == transportIndex)
+                    {
+                        cache.Add(kvp.Key);
+                        value.ResetState();
+                    }
+                }
+                //Not using transport index, no check required.
+                else
+                {
+                    value.ResetState();
+                }
             }
+
+            //If all are being disposed the collection can be cleared.
+            if (disposeAll)
+            {
+                clients.Clear();
+            }
+            //Otherwise, only remove those which were disposed.
             else
             {
-                return GetPooledInstantiated(nob.PrefabId, collectionId, asServer);
+                foreach (int item in cache)
+                    clients.Remove(item);
             }
+
+            CollectionCaches<int>.Store(cache);
         }
-        /// <summary>
-        /// Returns an instantiated object that has prefabId.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public NetworkObject GetPooledInstantiated(int prefabId, bool asServer)
-        {
-            return GetPooledInstantiated(prefabId, 0, asServer);
-        }
-        /// <summary>
-        /// Returns an instantiated object that has prefabId.
-        /// </summary>
-        public NetworkObject GetPooledInstantiated(int prefabId, ushort collectionId, bool asServer)
-        {
-            return _objectPool.RetrieveObject(prefabId, collectionId, asServer);
-        }
-        /// <summary>
-        /// Stores an instantiated object.
-        /// </summary>
-        /// <param name="instantiated">Object which was instantiated.</param>
-        /// <param name="prefabId"></param>
-        /// <param name="asServer">True to store for the server.</param>
-        [Obsolete("Use StorePooledInstantiated(NetworkObject, bool)")] //Remove on 2023/06/01.
-        public void StorePooledInstantiated(NetworkObject instantiated, int prefabId, bool asServer)
-        {
-            StorePooledInstantiated(instantiated, asServer);
-        }
-        /// <summary>
-        /// Stores an instantied object.
-        /// </summary>
-        /// <param name="instantiated">Object which was instantiated.</param>
-        /// <param name="asServer">True to store for the server.</param>
-        public void StorePooledInstantiated(NetworkObject instantiated, bool asServer)
-        {
-            _objectPool.StoreObject(instantiated, asServer);
-        }
-        #endregion
 
         #region Editor.
 #if UNITY_EDITOR
@@ -558,16 +522,13 @@ namespace FishNet.Managing
             if (SpawnablePrefabs == null)
                 Reset();
         }
+
         private void Reset()
         {
             ValidateSpawnablePrefabs(true);
         }
 
 #endif
-
         #endregion
-
     }
-
-
 }

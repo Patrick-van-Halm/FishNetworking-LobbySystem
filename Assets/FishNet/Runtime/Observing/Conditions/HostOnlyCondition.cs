@@ -16,15 +16,10 @@ namespace FishNet.Component.Observing
             return (base.NetworkObject.ClientManager.Connection == connection);
         }
 
-        public override bool Timed()
-        {
-            return false;
-        }
-
-        public override ObserverCondition Clone()
-        {
-            HostOnlyCondition copy = ScriptableObject.CreateInstance<HostOnlyCondition>();
-            return copy;
-        }
+        /// <summary>
+        /// How a condition is handled.
+        /// </summary>
+        /// <returns></returns>
+        public override ObserverConditionType GetConditionType() => ObserverConditionType.Normal;
     }
 }

@@ -1,5 +1,4 @@
-﻿using FishNet.Utility.Extension;
-using FishNet.CodeGenerating.Extension;
+﻿using FishNet.CodeGenerating.Extension;
 using FishNet.CodeGenerating.Helping;
 using FishNet.CodeGenerating.Helping.Extension;
 using FishNet.Configuring;
@@ -9,10 +8,12 @@ using FishNet.Object.Helping;
 using FishNet.Transporting;
 using MonoFN.Cecil;
 using MonoFN.Cecil.Cil;
+using GameKit.Dependencies.Utilities;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using UnityEngine;
+using FishNet.Object;
 
 namespace FishNet.CodeGenerating.Processing.Rpc
 {
@@ -46,7 +47,7 @@ namespace FishNet.CodeGenerating.Processing.Rpc
         /// <summary>
         /// Attribute helper.
         /// </summary>
-        public Attributes Attributes = new Attributes();
+        public Attributes Attributes = new();
         #endregion
 
         private List<(MethodDefinition, MethodDefinition)> _virtualRpcs = new List<(MethodDefinition createdLogicMd, MethodDefinition originalRpcMd)>();
@@ -55,13 +56,15 @@ namespace FishNet.CodeGenerating.Processing.Rpc
         private const string LOGIC_PREFIX = "RpcLogic___";
         private const string WRITER_PREFIX = "RpcWriter___";
         private const string READER_PREFIX = "RpcReader___";
-        private const string REQUIREOWNERSHIP_NAME = "RequireOwnership";
-        private const string RUNLOCALLY_NAME = "RunLocally";
-        private const string EXCLUDEOWNER_NAME = "ExcludeOwner";
-        private const string EXCLUDESERVER_NAME = "ExcludeServer";
-        private const string BUFFERLAST_NAME = "BufferLast";
-        private const string DATALENGTH_NAME = "DataLength";
-        private const string VALIDATETARGET_NAME = "ValidateTarget";
+        private const string REQUIREOWNERSHIP_NAME = nameof(ServerRpcAttribute.RequireOwnership);
+        private const string RUNLOCALLY_NAME = nameof(RpcAttribute.RunLocally);
+        private const string EXCLUDEOWNER_NAME = nameof(ObserversRpcAttribute.ExcludeOwner);
+        private const string EXCLUDESERVER_NAME = nameof(TargetRpcAttribute.ExcludeServer);
+        private const string BUFFERLAST_NAME = nameof(ObserversRpcAttribute.BufferLast);
+        private const string DATALENGTH_NAME = nameof(RpcAttribute.DataLength);
+        private const string VALIDATETARGET_NAME = nameof(TargetRpcAttribute.ValidateTarget);
+        private const string DATAORDERTYPE_NAME = nameof(RpcAttribute.OrderType);
+        private const string LOGGING_NAME = nameof(ServerRpcAttribute.Logging);
         #endregion
 
         public override bool ImportReferences()
@@ -70,12 +73,14 @@ namespace FishNet.CodeGenerating.Processing.Rpc
             return base.ImportReferences();
         }
 
-        internal bool Process(TypeDefinition typeDef, ref uint rpcCount)
+        internal bool ProcessLocal(TypeDefinition typeDef)
         {
             bool modified = false;
 
+            PredictionProcessor pp = base.GetClass<PredictionProcessor>();
+            uint rpcCount = GetRpcCountInParents(typeDef) + pp.GetPredictionCountInParents(typeDef) + pp.GetPredictionCount(typeDef);
             //All createdRpcs for typeDef.
-            List<CreatedRpc> typeDefCeatedRpcs = new List<CreatedRpc>();
+            List<CreatedRpc> typeDefCeatedRpcs = new();
             List<MethodDefinition> methodDefs = typeDef.Methods.ToList();
             foreach (MethodDefinition md in methodDefs)
             {
@@ -86,12 +91,12 @@ namespace FishNet.CodeGenerating.Processing.Rpc
                 }
 
                 //Rpcs created for this method.
-                List<CreatedRpc> createdRpcs = new List<CreatedRpc>();
+                List<CreatedRpc> createdRpcs = new();
                 List<AttributeData> attributeDatas = Attributes.GetRpcAttributes(md);
                 bool success = true;
                 foreach (AttributeData ad in attributeDatas)
                 {
-                    CreatedRpc cr = new CreatedRpc();
+                    CreatedRpc cr = new();
                     cr.OriginalMethodDef = md;
                     cr.AttributeData = ad;
                     cr.MethodHash = rpcCount;
@@ -163,15 +168,32 @@ namespace FishNet.CodeGenerating.Processing.Rpc
         }
 
         /// <summary>
+        /// Gets RPCcount count in all of typeDefs parents, excluding typeDef itself.
+        /// </summary>
+        internal uint GetRpcCountInParents(TypeDefinition typeDef)
+        {
+            uint count = 0;
+            do
+            {
+                typeDef = typeDef.GetNextBaseClassToProcess(base.Session);
+                if (typeDef != null)
+                    count += GetRpcCount(typeDef);
+
+            } while (typeDef != null);
+
+            return count;
+        }
+
+        /// <summary>
         /// Returns the method name with parameter types included within the name.
         /// </summary>
         public static string GetMethodNameAsParameters(MethodDefinition methodDef)
         {
-            StringBuilder sb = new StringBuilder();
+            StringBuilder sb = new();
             foreach (ParameterDefinition pd in methodDef.Parameters)
                 sb.Append(pd.ParameterType.FullName);
 
-            return $"{methodDef.Name}_{sb.ToString().GetStableHash32()}";
+            return $"{methodDef.Name}_{sb.ToString().GetStableHashU32()}";
         }
 
         /// <summary>
@@ -197,10 +219,7 @@ namespace FishNet.CodeGenerating.Processing.Rpc
                 {
                     RpcType rpcType = base.GetClass<AttributeHelper>().GetRpcAttributeType(customAttribute);
                     if (rpcType != RpcType.None)
-                    {
                         count++;
-                        break;
-                    }
                 }
             }
 
@@ -265,7 +284,7 @@ namespace FishNet.CodeGenerating.Processing.Rpc
             else
             {
                 //Create the method body.
-                createdMd = new MethodDefinition(methodName,
+                createdMd = new(methodName,
                     MethodAttributes.Private,
                     cr.Module.TypeSystem.Void);
                 cr.TypeDef.Methods.Add(createdMd);
@@ -295,11 +314,11 @@ namespace FishNet.CodeGenerating.Processing.Rpc
             List<RpcType> attributeRpcTypes = attributeDatas.GetRpcTypes();
 
             //Parameters to be serialized.
-            List<ParameterDefinition> serializedParameters = new List<ParameterDefinition>();
+            List<ParameterDefinition> serializedParameters = new();
             /* Parameters which won't be serialized, such as channel.
              * It's safe to add parameters which are null or
              * not used. */
-            HashSet<ParameterDefinition> nonserializedParameters = new HashSet<ParameterDefinition>();
+            HashSet<ParameterDefinition> nonserializedParameters = new();
 
             //Get channel if it exist, and get target parameter.
             ParameterDefinition channelParameterDef = GetChannelParameter(originalMd, rpcType);
@@ -359,11 +378,11 @@ namespace FishNet.CodeGenerating.Processing.Rpc
              * conditions such as if requireOwnership ect..
              * or if (!base.isClient) */
             
-                CreateClientRpcConditionsForServer(writerMd);
+                CreateClientRpcConditionsForServer(writerMd, cr.Attribute);
 
             VariableDefinition channelVariableDef = CreateAndPopulateChannelVariable(writerMd, channelParameterDef);
             /* Create a local PooledWriter variable. */
-            //Default value for data lenght.
+            //Default value for data length.
             int dataLength = -1;
             //Go through each attribute and see if a larger data length is specified.
             foreach (AttributeData ad in attributeDatas)
@@ -434,7 +453,7 @@ namespace FishNet.CodeGenerating.Processing.Rpc
             }
 
             //Call the method on NetworkBehaviour responsible for sending out the rpc.
-            processor.Add(CreateSendServerRpc(writerMd, cr.MethodHash, pooledWriterVariableDef, channelVariableDef));
+            processor.Add(CreateSendServerRpc(writerMd, cr.MethodHash, pooledWriterVariableDef, channelVariableDef, cr.Attribute));
             //Dispose of writer.
             processor.Add(wp.DisposePooledWriter(writerMd, pooledWriterVariableDef));
             //Add end of method.
@@ -499,7 +518,7 @@ namespace FishNet.CodeGenerating.Processing.Rpc
             else
             {
                 //Create the method body.
-                createdMd = new MethodDefinition(
+                createdMd = new(
                     methodName,
                     MethodAttributes.Private,
                     originalMd.Module.TypeSystem.Void);
@@ -553,7 +572,7 @@ namespace FishNet.CodeGenerating.Processing.Rpc
              * this should not occur but there's a chance as host
              * because deinitializations are slightly delayed to support
              * the clientHost deinitializing the object as well. */
-            base.GetClass<NetworkBehaviourHelper>().CreateIsServerCheck(createdMd, LoggingType.Off, false, false);
+            base.GetClass<NetworkBehaviourHelper>().CreateIsServerCheck(createdMd, LoggingType.Off, false, false, false);
             //
             CreateServerRpcConditionsForServer(processor, requireOwnership, connectionParameterDef);
 
@@ -628,7 +647,7 @@ namespace FishNet.CodeGenerating.Processing.Rpc
             * this should not occur but there's a chance as host
             * because deinitializations are slightly delayed to support
             * the clientHost deinitializing the object as well. */
-            base.GetClass<NetworkBehaviourHelper>().CreateIsClientCheck(createdMd, LoggingType.Off, false, false);
+            base.GetClass<NetworkBehaviourHelper>().CreateIsClientCheck(createdMd, LoggingType.Off, false, false, false);
 
             //Block from running twice as host.
             if (runLocally)
@@ -670,7 +689,7 @@ namespace FishNet.CodeGenerating.Processing.Rpc
         /// <param name="md"></param>
         private List<Instruction> CreateIsHostBlock(MethodDefinition md)
         {
-            List<Instruction> ints = new List<Instruction>();
+            List<Instruction> ints = new();
             ILProcessor processor = md.Body.GetILProcessor();
 
             Instruction endIfInst = processor.Create(OpCodes.Nop);
@@ -789,7 +808,7 @@ namespace FishNet.CodeGenerating.Processing.Rpc
             * reading the data then anything after the rpc
             * packet will be malformed due to invalid index. */
             readVariableDefs = new VariableDefinition[serializedParameters.Count];
-            allReadInsts = new List<Instruction>();
+            allReadInsts = new();
 
             //True if last parameter is a connection and a server rpc.
             for (int i = 0; i < serializedParameters.Count; i++)
@@ -812,7 +831,8 @@ namespace FishNet.CodeGenerating.Processing.Rpc
             if (requireOwnership)
                 base.GetClass<NetworkBehaviourHelper>().CreateLocalClientIsOwnerCheck(methodDef, LoggingType.Warning, false, false, true);
             //If (!base.IsClient)
-            base.GetClass<NetworkBehaviourHelper>().CreateIsClientCheck(methodDef, LoggingType.Warning, false, true);
+            LoggingType loggingType = rpcAttribute.GetField(LOGGING_NAME, LoggingType.Warning);
+            base.GetClass<NetworkBehaviourHelper>().CreateIsClientCheck(methodDef, loggingType, false, true, false);
         }
 
         /// <summary>
@@ -836,10 +856,11 @@ namespace FishNet.CodeGenerating.Processing.Rpc
         /// Creates conditions that server must pass to process a ClientRpc.
         /// </summary>
         /// <param name="createdProcessor"></param>
-        private void CreateClientRpcConditionsForServer(MethodDefinition methodDef)
+        private void CreateClientRpcConditionsForServer(MethodDefinition methodDef, CustomAttribute rpcAttribute)
         {
+            LoggingType loggingType = rpcAttribute.GetField(LOGGING_NAME, LoggingType.Warning);
             //If (!base.IsServer)
-            base.GetClass<NetworkBehaviourHelper>().CreateIsServerCheck(methodDef, LoggingType.Warning, false, false);
+            base.GetClass<NetworkBehaviourHelper>().CreateIsServerCheck(methodDef, loggingType, false, false, false);
         }
 
         /// <summary>
@@ -991,12 +1012,12 @@ namespace FishNet.CodeGenerating.Processing.Rpc
         /// </summary>
         /// <param name="writerVariableDef"></param>
         /// <param name="channel"></param>
-        private List<Instruction> CreateSendServerRpc(MethodDefinition methodDef, uint methodHash, VariableDefinition writerVariableDef, VariableDefinition channelVariableDef)
+        private List<Instruction> CreateSendServerRpc(MethodDefinition methodDef, uint methodHash, VariableDefinition writerVariableDef, VariableDefinition channelVariableDef, CustomAttribute rpcAttribute)
         {
-            List<Instruction> insts = new List<Instruction>();
+            List<Instruction> insts = new();
             ILProcessor processor = methodDef.Body.GetILProcessor();
 
-            insts.AddRange(CreateSendRpcCommon(processor, methodHash, writerVariableDef, channelVariableDef));
+            insts.AddRange(CreateSendRpcCommon(processor, methodHash, writerVariableDef, channelVariableDef, rpcAttribute));
             //Call NetworkBehaviour.
             insts.Add(processor.Create(OpCodes.Call, base.GetClass<NetworkBehaviourHelper>().SendServerRpc_MethodRef));
 
@@ -1008,10 +1029,10 @@ namespace FishNet.CodeGenerating.Processing.Rpc
         /// </summary>
         private List<Instruction> CreateSendObserversRpc(MethodDefinition methodDef, uint methodHash, VariableDefinition writerVariableDef, VariableDefinition channelVariableDef, CustomAttribute rpcAttribute)
         {
-            List<Instruction> insts = new List<Instruction>();
+            List<Instruction> insts = new();
             ILProcessor processor = methodDef.Body.GetILProcessor();
 
-            insts.AddRange(CreateSendRpcCommon(processor, methodHash, writerVariableDef, channelVariableDef));
+            insts.AddRange(CreateSendRpcCommon(processor, methodHash, writerVariableDef, channelVariableDef, rpcAttribute));
             //Also add if buffered.
             bool bufferLast = rpcAttribute.GetField(BUFFERLAST_NAME, false);
             bool excludeOwner = rpcAttribute.GetField(EXCLUDEOWNER_NAME, false);
@@ -1032,7 +1053,7 @@ namespace FishNet.CodeGenerating.Processing.Rpc
 
             insts.Add(processor.Create(OpCodes.Ldc_I4, bufferLast.ToInt()));
             insts.Add(processor.Create(OpCodes.Ldc_I4, excludeServer.ToInt()));
-            insts.Add(processor.Create(OpCodes.Ldc_I4, excludeOwner.ToInt())); 
+            insts.Add(processor.Create(OpCodes.Ldc_I4, excludeOwner.ToInt()));
             //Call NetworkBehaviour.
             insts.Add(processor.Create(OpCodes.Call, base.GetClass<NetworkBehaviourHelper>().SendObserversRpc_MethodRef));
 
@@ -1043,20 +1064,17 @@ namespace FishNet.CodeGenerating.Processing.Rpc
         /// </summary>
         private List<Instruction> CreateSendTargetRpc(MethodDefinition methodDef, uint methodHash, VariableDefinition writerVariableDef, VariableDefinition channelVariableDef, ParameterDefinition targetConnectionParameterDef, List<AttributeData> attributeDatas)
         {
-            List<Instruction> insts = new List<Instruction>();
+            List<Instruction> insts = new();
             ILProcessor processor = methodDef.Body.GetILProcessor();
 
             CustomAttribute rpcAttribute = attributeDatas.GetAttribute(base.Session, RpcType.Target);
             bool validateTarget = rpcAttribute.GetField(VALIDATETARGET_NAME, true);
             bool excludeServer = rpcAttribute.GetField(EXCLUDESERVER_NAME, false);
 
-            insts.AddRange(CreateSendRpcCommon(processor, methodHash, writerVariableDef, channelVariableDef));
-            //Reference to NetworkConnection that RPC is going to.
+            insts.AddRange(CreateSendRpcCommon(processor, methodHash, writerVariableDef, channelVariableDef, rpcAttribute));
             insts.Add(processor.Create(OpCodes.Ldarg, targetConnectionParameterDef));
-            //Exclude server from rpc.
             insts.Add(processor.Create(OpCodes.Ldc_I4, excludeServer.ToInt()));
-            //Validate target receiving the rpc.
-            insts.Add(processor.Create(OpCodes.Ldc_I4, validateTarget.ToInt()));            
+            insts.Add(processor.Create(OpCodes.Ldc_I4, validateTarget.ToInt()));
             //Call NetworkBehaviour.
             insts.Add(processor.Create(OpCodes.Call, base.GetClass<NetworkBehaviourHelper>().SendTargetRpc_MethodRef));
 
@@ -1066,9 +1084,9 @@ namespace FishNet.CodeGenerating.Processing.Rpc
         /// <summary>
         /// Writes common properties that all SendRpc methods use.
         /// </summary>
-        private List<Instruction> CreateSendRpcCommon(ILProcessor processor, uint methodHash, VariableDefinition writerVariableDef, VariableDefinition channelVariableDef)
+        private List<Instruction> CreateSendRpcCommon(ILProcessor processor, uint methodHash, VariableDefinition writerVariableDef, VariableDefinition channelVariableDef, CustomAttribute rpcAttribute)
         {
-            List<Instruction> insts = new List<Instruction>();
+            List<Instruction> insts = new();
 
             insts.Add(processor.Create(OpCodes.Ldarg_0)); // argument: this
             insts.Add(processor.Create(OpCodes.Ldc_I4, (int)methodHash));
@@ -1076,6 +1094,9 @@ namespace FishNet.CodeGenerating.Processing.Rpc
             insts.Add(processor.Create(OpCodes.Ldloc, writerVariableDef));
             //reference to Channel.
             insts.Add(processor.Create(OpCodes.Ldloc, channelVariableDef));
+
+            int orderType = (int)rpcAttribute.GetField(DATAORDERTYPE_NAME, DataOrderType.Default);
+            insts.Add(processor.Create(OpCodes.Ldc_I4, orderType));
 
             return insts;
         }

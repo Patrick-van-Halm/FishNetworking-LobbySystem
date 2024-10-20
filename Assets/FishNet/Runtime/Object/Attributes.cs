@@ -5,17 +5,23 @@ using UnityEngine;
 
 namespace FishNet.Object
 {
-
-    /// <summary>
-    /// ServerRpc methods will send messages to the server.
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
-    public class ServerRpcAttribute : Attribute
+    public enum DataOrderType
     {
         /// <summary>
-        /// True to only allow the owning client to call this RPC.
+        /// Data will buffer in the order originally intended.
+        /// EG: SyncTypes will always send last, and RPCs will always send in the order they were called.
         /// </summary>
-        public bool RequireOwnership = true;
+        Default = 0,
+        /// <summary>
+        /// Data will be attached to the end of the packet.
+        /// RPCs can be sent after all SyncTypes by using this value. Multiple RPCs with this order type will send last, in the order they were called.
+        /// </summary>
+        Last = 1,
+    }
+
+    [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
+    public class RpcAttribute : Attribute
+    {
         /// <summary>
         /// True to also run the RPC logic locally.
         /// </summary>
@@ -26,13 +32,33 @@ namespace FishNet.Object
         /// This is useful for writing large packets which otherwise resize the serializer.
         /// </summary>
         public int DataLength = -1;
+        /// <summary>
+        /// Order in which to send data for this RPC.
+        /// </summary>
+        public DataOrderType OrderType = DataOrderType.Default;
+    }
+
+    /// <summary>
+    /// ServerRpc methods will send messages to the server.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
+    public class ServerRpcAttribute : RpcAttribute
+    {
+        /// <summary>
+        /// True to only allow the owning client to call this RPC.
+        /// </summary>
+        public bool RequireOwnership = true;
+        /// <summary>
+        /// Type of logging to use when the IsServer check fails.
+        /// </summary>
+        public LoggingType Logging = LoggingType.Warning;
     }
 
     /// <summary>
     /// ObserversRpc methods will send messages to all observers.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
-    public class ObserversRpcAttribute : Attribute
+    public class ObserversRpcAttribute : RpcAttribute
     {
         /// <summary>
         /// True to exclude the owner from receiving this RPC.
@@ -48,42 +74,30 @@ namespace FishNet.Object
         /// </summary>
         public bool BufferLast = false;
         /// <summary>
-        /// True to also run the RPC logic locally.
+        /// Type of logging to use when the IsServer check fails.
         /// </summary>
-        public bool RunLocally = false;
-        /// <summary>
-        /// Estimated length of data being sent.
-        /// When a value other than -1 the minimum length of the used serializer will be this value.
-        /// This is useful for writing large packets which otherwise resize the serializer.
-        /// </summary>
-        public int DataLength = -1;
+        public LoggingType Logging = LoggingType.Warning;
     }
 
     /// <summary>
     /// TargetRpc methods will send messages to a single client.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
-    public class TargetRpcAttribute : Attribute 
+    public class TargetRpcAttribute : RpcAttribute 
     {
         /// <summary>
         /// True to prevent the connection from receiving this Rpc if they are also server.
         /// </summary>
         public bool ExcludeServer = false;
         /// <summary>
-        /// True to also run the RPC logic locally.
-        /// </summary>
-        public bool RunLocally = false;
-        /// <summary>
         /// True to validate the target is possible and output debug when not.
         /// Use this field with caution as it may create undesired results when set to false.
         /// </summary>
         public bool ValidateTarget = true;
         /// <summary>
-        /// Estimated length of data being sent.
-        /// When a value other than -1 the minimum length of the used serializer will be this value.
-        /// This is useful for writing large packets which otherwise resize the serializer.
+        /// Type of logging to use when the IsServer check fails.
         /// </summary>
-        public int DataLength = -1;
+        public LoggingType Logging = LoggingType.Warning;
     }
 
     /// <summary>
@@ -124,6 +138,7 @@ namespace FishNet.Object.Synchronizing
     /// Synchronizes collections or objects from the server to clients. Can be used with custom SyncObjects.
     /// Value must be changed on server.
     /// </summary>
+    [Obsolete("This no longer functions. See console errors and Break Solutions in the documentation for resolution.")]
     [AttributeUsage(AttributeTargets.Field, Inherited = true, AllowMultiple = false)]
     public class SyncObjectAttribute : PropertyAttribute
     {
@@ -136,8 +151,12 @@ namespace FishNet.Object.Synchronizing
         /// </summary>
         public ReadPermission ReadPermissions = ReadPermission.Observers;
         /// <summary>
+        /// Network roles which may update values.
+        /// </summary>
+        public WritePermission WritePermissions = WritePermission.ServerOnly;
+        /// <summary>
         /// True if to require the readonly attribute.
-        /// Setting to false will allow inspector serialization of this object, but you must never manually initialize this object.
+        /// Setting to false will allow inspector serialization of this object. When false you must still initialize this object on it's field declaration, but never anywhere else.
         /// </summary>
         public bool RequireReadOnly = true;
     }
@@ -146,6 +165,7 @@ namespace FishNet.Object.Synchronizing
     /// Synchronizes a variable from server to clients automatically.
     /// Value must be changed on server.
     /// </summary>
+    [Obsolete("This no longer functions. Use SyncVar<Type> instead. See console errors and Break Solutions in the documentation for resolution.")]
     [AttributeUsage(AttributeTargets.Field, Inherited = true, AllowMultiple = false)]
     public class SyncVarAttribute : PropertyAttribute
     {
@@ -157,6 +177,10 @@ namespace FishNet.Object.Synchronizing
         /// Clients which may receive value updates.
         /// </summary>
         public ReadPermission ReadPermissions = ReadPermission.Observers;
+        /// <summary>
+        /// Network roles which may update values.
+        /// </summary>
+        public WritePermission WritePermissions = WritePermission.ServerOnly;
         /// <summary>
         /// Channel to use. Unreliable SyncVars will use eventual consistency.
         /// </summary>

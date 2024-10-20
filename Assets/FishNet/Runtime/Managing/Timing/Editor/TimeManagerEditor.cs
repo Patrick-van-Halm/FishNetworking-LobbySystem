@@ -16,7 +16,7 @@ namespace FishNet.Managing.Timing.Editing
         private SerializedProperty _allowTickDropping;
         private SerializedProperty _maximumFrameTicks;
         private SerializedProperty _pingInterval;
-        private SerializedProperty _timingInterval;
+        //private SerializedProperty _timingInterval;
         private SerializedProperty _physicsMode;        
 
         protected virtual void OnEnable()
@@ -27,7 +27,7 @@ namespace FishNet.Managing.Timing.Editing
             _allowTickDropping = serializedObject.FindProperty("_allowTickDropping");
             _maximumFrameTicks = serializedObject.FindProperty("_maximumFrameTicks");
             _pingInterval = serializedObject.FindProperty("_pingInterval");
-            _timingInterval = serializedObject.FindProperty("_timingInterval");
+            //_timingInterval = serializedObject.FindProperty("_timingInterval");
             _physicsMode = serializedObject.FindProperty("_physicsMode");
         }
 
@@ -53,16 +53,18 @@ namespace FishNet.Managing.Timing.Editing
             }
             EditorGUILayout.PropertyField(_tickRate);
             EditorGUILayout.PropertyField(_pingInterval);
-            EditorGUILayout.PropertyField(_timingInterval);            
+            //EditorGUILayout.PropertyField(_timingInterval);            
             EditorGUI.indentLevel--;
             EditorGUILayout.Space();
 
             //Physics.
             EditorGUILayout.LabelField("Physics", EditorStyles.boldLabel);
             EditorGUI.indentLevel++;
+            if (_physicsMode.intValue == (int)FishNet.Managing.Timing.PhysicsMode.TimeManager)
+                EditorGUILayout.HelpBox($"Time.fixedDeltaTime will be overriden with TimeManager.TickDelta ({(1f / (float)_tickRate.intValue).ToString("0.###")})", MessageType.Info);
+            else
+                EditorGUILayout.HelpBox("If you are using physics interactions be sure to change the PhysicsMode to TimeManager and implement physics within the TimeManager tick events. NetworkTransform may also jitter when not using PhysicsMode.TimeManager.", MessageType.Warning);
             EditorGUILayout.PropertyField(_physicsMode);
-            if (_physicsMode.intValue != (int)FishNet.Managing.Timing.PhysicsMode.TimeManager)
-                EditorGUILayout.HelpBox("If you are using physics interactions be sure to change the PhysicsMode to TimeManager and implement physics within the TimeManager tick events.", MessageType.None);
             EditorGUI.indentLevel--;
 
             ////Prediction.

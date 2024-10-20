@@ -1,4 +1,6 @@
-﻿using FishNet.Object;
+﻿using FishNet.CodeGenerating.Extension;
+using FishNet.CodeGenerating.Helping.Extension;
+using FishNet.Object;
 using FishNet.Serializing;
 using MonoFN.Cecil;
 using System;
@@ -12,17 +14,19 @@ namespace FishNet.CodeGenerating.Helping
         #region Reflection references.
         public MethodReference WriterPool_GetWriter_MethodRef;
         public MethodReference WriterPool_GetWriterLength_MethodRef;
-        public MethodReference Writer_WritePackedWhole_MethodRef;
+        public MethodReference Writer_WritePackedWhole_Signed_MethodRef;
+        public MethodReference Writer_WritePackedWhole_Unsigned_MethodRef;
         public TypeReference PooledWriter_TypeRef;
         public TypeReference Writer_TypeRef;
         public MethodReference PooledWriter_Dispose_MethodRef;
         public MethodReference Writer_WriteDictionary_MethodRef;
+        public MethodReference Writer_WriteList_MethodRef;
+        public MethodReference Writer_WriteArray_MethodRef;
         public TypeReference AutoPackTypeRef;
 
-        public TypeReference GenericWriterTypeRef;
-        public TypeReference WriterTypeRef;
-        public MethodReference WriteGetSetMethodRef;
-        public MethodReference WriteAutoPackGetSetMethodRef;
+        public TypeReference GenericWriter_TypeRef;
+        public MethodReference GenericWriter_Write_MethodRef;
+        public MethodReference Writer_Write_MethodRef;
         #endregion
 
         /// <summary>
@@ -35,22 +39,19 @@ namespace FishNet.CodeGenerating.Helping
             PooledWriter_TypeRef = base.ImportReference(typeof(PooledWriter));
             Writer_TypeRef = base.ImportReference(typeof(Writer));
             AutoPackTypeRef = base.ImportReference(typeof(AutoPackType));
+            GenericWriter_TypeRef = base.ImportReference(typeof(GenericWriter<>));
+            Writer_Write_MethodRef = Writer_TypeRef.CachedResolve(base.Session).GetMethodReference(base.Session, nameof(Writer.Write));
 
-            GenericWriterTypeRef = base.ImportReference(typeof(GenericWriter<>));
-            WriterTypeRef = base.ImportReference(typeof(Writer));
 
-            PropertyInfo writePropertyInfo;
-            writePropertyInfo = typeof(GenericWriter<>).GetProperty(nameof(GenericWriter<int>.Write));
-            WriteGetSetMethodRef = base.ImportReference(writePropertyInfo.GetSetMethod());
-            writePropertyInfo = typeof(GenericWriter<>).GetProperty(nameof(GenericWriter<int>.WriteAutoPack));
-            WriteAutoPackGetSetMethodRef = base.ImportReference(writePropertyInfo.GetSetMethod());
+            TypeDefinition genericWriterTd = GenericWriter_TypeRef.CachedResolve(base.Session);
+            GenericWriter_Write_MethodRef = base.ImportReference(genericWriterTd.GetMethod(nameof(GenericWriter<int>.SetWrite)));
 
             //WriterPool.GetWriter
             Type writerPoolType = typeof(WriterPool);
             base.ImportReference(writerPoolType);
             foreach (var methodInfo in writerPoolType.GetMethods())
             {
-                if (methodInfo.Name == nameof(WriterPool.GetWriter))
+                if (methodInfo.Name == nameof(WriterPool.Retrieve))
                 {
                     //GetWriter().
                     if (methodInfo.GetParameters().Length == 0)
@@ -72,15 +73,23 @@ namespace FishNet.CodeGenerating.Helping
             Type pooledWriterType = typeof(PooledWriter);
             foreach (MethodInfo methodInfo in pooledWriterType.GetMethods())
             {
-                if (gwh.IsSpecialWriteMethod(methodInfo))
-                {
-                    if (methodInfo.Name == nameof(PooledWriter.Dispose))
-                        PooledWriter_Dispose_MethodRef = base.ImportReference(methodInfo);
-                    else if (methodInfo.Name == nameof(PooledWriter.WritePackedWhole))
-                        Writer_WritePackedWhole_MethodRef = base.ImportReference(methodInfo);
-                    else if (methodInfo.Name == nameof(PooledWriter.WriteDictionary))
-                        Writer_WriteDictionary_MethodRef = base.ImportReference(methodInfo);
+                int parameterCount = methodInfo.GetParameters().Length;
+
+                if (methodInfo.Name == nameof(PooledWriter.Store))
+                    PooledWriter_Dispose_MethodRef = base.ImportReference(methodInfo);
+                else if (methodInfo.Name == nameof(PooledWriter.WriteUnsignedPackedWhole))
+                { 
+                    //todo: check if signed or not and set to signed/unsigned variable.
+                    //do the same changes for methods which call these.
+                    //Writer_WritePackedWhole_MethodRef = base.ImportReference(methodInfo);
                 }
+                //Relay writers.
+                else if (parameterCount == 1 && methodInfo.Name == nameof(PooledWriter.WriteDictionary))
+                    Writer_WriteDictionary_MethodRef = base.ImportReference(methodInfo);
+                else if (parameterCount == 1 && methodInfo.Name == nameof(PooledWriter.WriteList))
+                    Writer_WriteList_MethodRef = base.ImportReference(methodInfo);
+                else if (parameterCount == 1 && methodInfo.Name == nameof(PooledWriter.WriteArray))
+                    Writer_WriteArray_MethodRef = base.ImportReference(methodInfo);
             }
 
             return true;

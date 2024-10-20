@@ -135,7 +135,7 @@ namespace FishNet.Transporting
         /// Returns if the transport is only run locally, offline.
         /// While true several security checks are disabled.
         /// </summary>
-        /// <param name="connectionid"></param>
+        /// <param name="connectionid">Optional connectionId to check against.</param>
         public virtual bool IsLocalTransport(int connectionid) => false;
         /// <summary>
         /// Gets how long in seconds until either the server or client socket must go without data before being timed out.
@@ -155,11 +155,7 @@ namespace FishNet.Transporting
         public virtual int GetMaximumClients()
         {
             string message = $"The current transport does not support this feature.";
-            if (NetworkManager == null)
-                NetworkManager.StaticLogWarning(message);
-            else
-                NetworkManager.LogWarning(message);
-
+            NetworkManager.LogWarning(message);
             return -1;
         }
         /// <summary>
@@ -169,10 +165,7 @@ namespace FishNet.Transporting
         public virtual void SetMaximumClients(int value)
         {
             string message = $"The current transport does not support this feature.";
-            if (NetworkManager == null)
-                NetworkManager.StaticLogWarning(message);
-            else
-                NetworkManager.LogWarning(message);
+            NetworkManager.LogWarning(message);
         }
         /// <summary>
         /// Sets which address the client will connect to.
