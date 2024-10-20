@@ -23,3 +23,9 @@ This is the scene that will be used to start the client. When the client has joi
 
 ## Expanding
 You are allowed to expand this project in any way. Have any improvements? Open a pull request!
+
+## Special thanks
+Thanks to the following contributers making this project better.
+
+### [Purring Bytes](https://github.com/PurringBytesDev)
+Upgrading from Fishnet v3.3.0 to v4.5.1
